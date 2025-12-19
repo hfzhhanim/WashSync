@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // **NEW: Firestore**
-import 'package:firebase_auth/firebase_auth.dart'; // **NEW: Firebase Auth**
+import 'package:cloud_firestore/cloud_firestore.dart'; // Firestore
+import 'package:firebase_auth/firebase_auth.dart'; // Firebase Auth
 
 // --- Global variables remain the same ---
 enum MachineCategory { washer, dryer }
@@ -89,8 +89,8 @@ class ReportPageState extends State<ReportPage> {
 
             try {
                 // 2. **NEW: FIREBASE WRITE LOGIC**
-                await FirebaseFirestore.instance.collection('issueReports').add({
-                    'userId': user.uid, // <-- SAVES THE UNIQUE FIREBASE USER ID (UID)
+                await FirebaseFirestore.instance.collection('userReports').add({
+                   // 'userId': user.uid, // <-- SAVES THE UNIQUE FIREBASE USER ID (UID)
                     'category': _selectedCategory.toString().split('.').last,
                     'machineNumber': _selectedMachineNumber,
                     'issueType': _selectedIssue.toString().split('.').last,
