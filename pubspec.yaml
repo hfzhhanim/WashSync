@@ -24,6 +24,9 @@ dev_dependencies:
   flutter_lints: ^3.0.0
 
 flutter:
-  # This line must have exactly 2 spaces before it
+
   uses-material-design: true
-  
+
+  assets:
+    - assets/icons/
+    - assets/images/  
