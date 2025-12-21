@@ -2,17 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-// Team's Pages (Using ../ to go out of 'screens' folder if they are in lib root)
+// Team's Pages
 import 'sign_in_page.dart';
 import 'report_page.dart';           
 import 'feedback_rating_page.dart';   
 
-// YOUR Wallet & Payment Pages (In the same 'screens' folder)
+// YOUR Wallet & Payment Pages
 import 'wallet_page.dart';
 import 'payment_screen.dart';
-import 'profile_page.dart'; // Ensure these exist or use friend's mock pages
+import 'washer_page.dart';
+import 'dryer_page.dart';
+import 'profile_page.dart';
 
-/// ---------------- NAV ITEM MODEL ----------------
 class NavItem {
   final IconData icon;
   final String label;
@@ -34,9 +35,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   User? get user => FirebaseAuth.instance.currentUser;
-  int _currentIndex = 0;
 
-  // Navigation Helper
   void _navigateTo(Widget page) {
     Navigator.push(
       context,
@@ -50,7 +49,6 @@ class _HomePageState extends State<HomePage> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    // Navigation items linked to your working pages
     final navItems = [
       NavItem(
         icon: Icons.person_outline,
@@ -88,26 +86,38 @@ class _HomePageState extends State<HomePage> {
             children: [
               _topBar(context),
               const SizedBox(height: 16),
-              _userCard(user!),
+              _userCard(user!), // Original welcome user layout
               const SizedBox(height: 16),
-              _stats(user!), // Fixed with tap support
+              _stats(user!), // 2 Equal sized boxes (Uses & Balance)
               const SizedBox(height: 20),
-              
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.only(bottom: 100),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _sectionLabel("Washers"),
-                      _machineGrid(type: 'Washer', count: 5, icon: Icons.local_laundry_service),
-                      const SizedBox(height: 20),
-                      _sectionLabel("Dryers"),
-                      _machineList(type: 'Dryer', count: 5, icon: Icons.dry),
-                    ],
-                  ),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text("Machines", 
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
                 ),
               ),
+              const SizedBox(height: 12),
+              
+              // RESTORED: Single bar layout for navigation to sub-pages
+              _machineBar(
+                title: "Washer",
+                docId: "washer",
+                icon: Icons.local_laundry_service,
+                color: const Color(0xFF9B59B6),
+                onTap: () => _navigateTo(const WasherPage()),
+              ),
+              const SizedBox(height: 12),
+              _machineBar(
+                title: "Dryer",
+                docId: "dryer",
+                icon: Icons.dry,
+                color: const Color(0xFFB97AD9),
+                onTap: () => _navigateTo(const DryerPage()),
+              ),
+              
+              const Spacer(),
               _bottomNav(navItems),
             ],
           ),
@@ -116,45 +126,32 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _sectionLabel(String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Text(text, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
-    );
-  }
-
-  /// ---------------- TOP BAR ----------------
+  // --- TOP BAR (Original Style) ---
   Widget _topBar(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Image.asset("assets/icons/logoWashSync.png", height: 32, 
-                  errorBuilder: (context, error, stackTrace) => const Icon(Icons.local_laundry_service, color: Colors.white)),
-              ),
-              const SizedBox(width: 10),
-              const Text("WashSync", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700)),
+              Image.asset("assets/icons/logoWashSync.png", 
+                height: 30, 
+                errorBuilder: (context, error, stackTrace) => const Icon(Icons.local_laundry_service, color: Colors.white)),
+              const SizedBox(width: 8),
+              const Text("WashSync", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
             ],
           ),
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.white),
             onPressed: () => FirebaseAuth.instance.signOut(),
-          )
+          ),
         ],
       ),
     );
   }
 
-  /// ---------------- USER CARD ----------------
+  // --- USER CARD (Original Welcome Layout) ---
   Widget _userCard(User user) {
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
@@ -165,7 +162,7 @@ class _HomePageState extends State<HomePage> {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Container(
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 6)]),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
             child: Row(
               children: [
                 const CircleAvatar(radius: 28, backgroundColor: Colors.purple, child: Icon(Icons.person, color: Colors.white)),
@@ -173,7 +170,7 @@ class _HomePageState extends State<HomePage> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text("Hello 👋"),
+                    const Text("Hello 👋", style: TextStyle(color: Colors.grey, fontSize: 12)),
                     Text(data['username'] ?? "User", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                     Text(data['email'] ?? "", style: const TextStyle(color: Colors.purple, fontSize: 11)),
                   ],
@@ -186,7 +183,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  /// ---------------- STATS (FIXED FOR TAP) ----------------
+  // --- STATS (2 Equal Boxes, No Vouchers) ---
   Widget _stats(User user) {
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
@@ -199,17 +196,14 @@ class _HomePageState extends State<HomePage> {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
-              _statCard("${data['totalUses'] ?? 0}", "Uses", Icons.show_chart, null),
-              const SizedBox(width: 10),
-              // THE WALLET TAP BOX
+              _statCard("${data['totalUses'] ?? 0}", "Total Uses", Icons.show_chart, null),
+              const SizedBox(width: 12),
               _statCard(
                 "RM ${balance.toStringAsFixed(2)}", 
                 "Balance", 
                 Icons.account_balance_wallet, 
                 () => _navigateTo(const WalletPage(amountToDeduct: -1.0))
               ),
-              const SizedBox(width: 10),
-              _statCard("${data['vouchers'] ?? 0}", "Vouchers", Icons.confirmation_number, null),
             ],
           ),
         );
@@ -226,13 +220,13 @@ class _HomePageState extends State<HomePage> {
           onTap: onTap,
           borderRadius: BorderRadius.circular(14),
           child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 12),
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
             child: Column(
               children: [
-                Icon(icon, color: Colors.purple, size: 20),
-                const SizedBox(height: 6),
-                Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                Text(label, style: const TextStyle(color: Colors.purple, fontSize: 10)),
+                Icon(icon, color: Colors.purple, size: 24),
+                const SizedBox(height: 8),
+                Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                Text(label, style: const TextStyle(color: Colors.purple, fontSize: 12, fontWeight: FontWeight.w500)),
               ],
             ),
           ),
@@ -241,71 +235,103 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  /// ---------------- MACHINE LIST ----------------
-  Widget _machineGrid({required String type, required int count, required IconData icon}) {
-    return SizedBox(
-      height: 160,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        itemCount: count,
-        itemBuilder: (context, index) {
-          return Container(
-            width: 140,
-            margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(20)),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, color: Colors.purple, size: 30),
-                Text("$type ${index + 1}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                const Text("RM 5.00", style: TextStyle(color: Colors.grey, fontSize: 10)),
-                const SizedBox(height: 8),
-                ElevatedButton(
-                  onPressed: () => _navigateTo(const PaymentScreen()),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.purple, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), minimumSize: const Size(0, 30)),
-                  child: const Text("PAY NOW", style: TextStyle(fontSize: 10)),
+  // --- MACHINE BAR (Original Bar Design) ---
+  Widget _machineBar({required String title, required String docId, required IconData icon, required Color color, required VoidCallback onTap}) {
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance.collection('machines').doc(docId).snapshots(),
+      builder: (context, snapshot) {
+        int available = 0, total = 0;
+        if (snapshot.hasData && snapshot.data!.exists) {
+          final data = snapshot.data!.data() as Map<String, dynamic>;
+          available = data['available'] ?? 0;
+          total = data['total'] ?? 0;
+        }
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: color, 
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [BoxShadow(color: color.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))],
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: Colors.white, size: 40),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                    Text("$available of $total available", style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                  ],
                 ),
+              ),
+              ElevatedButton(
+                onPressed: onTap,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: color,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  elevation: 0,
+                ),
+                child: const Text("VIEW", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // --- BOTTOM NAV (Original Style) ---
+  Widget _bottomNav(List<NavItem> items) {
+    return SizedBox(
+      height: 80,
+      child: Stack(
+        alignment: Alignment.bottomCenter,
+        children: [
+          Container(
+            height: 60,
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(color: const Color(0xFFB48DD6), borderRadius: BorderRadius.circular(24)),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _navItemUI(items[0]),
+                _navItemUI(items[1]),
+                const SizedBox(width: 40),
+                _navItemUI(items[2]),
+                _navItemUI(items[3]),
               ],
             ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _machineList({required String type, required int count, required IconData icon}) => _machineGrid(type: type, count: count, icon: icon);
-
-  /// ---------------- BOTTOM NAV ----------------
-  Widget _bottomNav(List<NavItem> items) {
-    return Container(
-      height: 70,
-      margin: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: const Color(0xFFB48DD6), borderRadius: BorderRadius.circular(24), boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 10)]),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: List.generate(items.length, (index) => _navItem(
-          item: items[index], 
-          isActive: _currentIndex == index, 
-          onTap: () {
-            setState(() => _currentIndex = index);
-            items[index].onTap();
-          },
-        )),
-      ),
-    );
-  }
-
-  Widget _navItem({required NavItem item, required bool isActive, required VoidCallback onTap}) {
-    return InkWell(
-      onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(item.icon, color: Colors.white, size: isActive ? 28 : 24),
-          Text(item.label, style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: isActive ? FontWeight.bold : FontWeight.normal)),
+          ),
+          Positioned(
+            top: 0, 
+            child: CircleAvatar(
+              radius: 32, 
+              backgroundColor: const Color(0xFF8A3FFC), 
+              child: IconButton(
+                icon: const Icon(Icons.home, color: Colors.white, size: 32), 
+                onPressed: () {}
+              )
+            )
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _navItemUI(NavItem item) {
+    return GestureDetector(
+      onTap: item.onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min, 
+        children: [
+          Icon(item.icon, color: Colors.white, size: 22),
+          Text(item.label, style: const TextStyle(color: Colors.white, fontSize: 10)),
+        ]
       ),
     );
   }
