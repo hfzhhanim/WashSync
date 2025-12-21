@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'signup_step1_name.dart';
 import 'home_page.dart';
-import 'admin_sign_in_page.dart';
+///import 'admin_sign_in_page.dart';
 
 class SignInPage extends StatefulWidget {
   const SignInPage({super.key});
@@ -225,7 +225,7 @@ class _SignInPageState extends State<SignInPage> {
 
                           const SizedBox(height: 10),
 
-                          GestureDetector(
+                          /*GestureDetector(
                             onTap: () {
                               Navigator.push(
                                 context,
@@ -242,7 +242,7 @@ class _SignInPageState extends State<SignInPage> {
                                 decoration: TextDecoration.underline,
                               ),
                             ),
-                          ),
+                          ),*/
                         ],
                       ),
                     ],

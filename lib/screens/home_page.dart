@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'sign_in_page.dart';
 
+import 'profile_page.dart';
+import 'history_page.dart';
+import 'report_page.dart';
+import 'feedback_rating_page.dart';
+
+/// ---------------- NAV ITEM MODEL ----------------
 class NavItem {
   final IconData icon;
   final String label;
@@ -15,6 +20,7 @@ class NavItem {
   });
 }
 
+/// ---------------- MOCK PAGES ----------------
 class WasherPage extends StatelessWidget {
   const WasherPage({super.key});
 
@@ -39,6 +45,7 @@ class DryerPage extends StatelessWidget {
   }
 }
 
+/// ---------------- HOME PAGE ----------------
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -47,54 +54,60 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-
-  late final List<NavItem> navItems;
+  User? get user => FirebaseAuth.instance.currentUser;
+  int _currentIndex = 0;
 
   @override
-  void initState() {
-    super.initState();
+  Widget build(BuildContext context) {
+    if (user == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
 
-    navItems = [
+    final navItems = [
       NavItem(
         icon: Icons.person_outline,
         label: "Profile",
         onTap: () {
-          // TODO: Navigator.push(context, ...)
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const ProfilePage()),
+          );
         },
       ),
       NavItem(
         icon: Icons.history,
         label: "History",
         onTap: () {
-          // TODO
+          debugPrint("NAV → History");
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const HistoryPage()),
+          );
         },
       ),
       NavItem(
         icon: Icons.report_outlined,
         label: "Report",
         onTap: () {
-          // TODO
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const ReportPage()),
+          );
         },
       ),
       NavItem(
         icon: Icons.feedback_outlined,
         label: "Feedback",
         onTap: () {
-          // TODO
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const FeedbackRatingPage()),
+          );
         },
       ),
     ];
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user == null) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
 
     return Scaffold(
       body: Container(
@@ -113,9 +126,9 @@ class _HomePageState extends State<HomePage> {
             children: [
               _topBar(context),
               const SizedBox(height: 16),
-              _userCard(user),
+              _userCard(user!),
               const SizedBox(height: 16),
-              _stats(user),
+              _stats(user!),
               const SizedBox(height: 20),
 
               Padding(
@@ -136,11 +149,12 @@ class _HomePageState extends State<HomePage> {
               ),
               const SizedBox(height: 12),
 
+
               _washerCard(),
               const SizedBox(height: 12),
               _dryerCard(),
               const Spacer(),
-              _bottomNav(),
+              _bottomNav(navItems),
             ],
           ),
         ),
@@ -148,44 +162,45 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // 🔝 TOP BAR
+  /// ---------------- TOP BAR ----------------
   Widget _topBar(BuildContext context) {
+    const SizedBox(height: 8);
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
             children: [
-              Image.asset("assets/icons/logoWashSync.png", height: 30),
-              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.all(6), // makes logo pop
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Image.asset(
+                  "assets/icons/logoWashSync.png",
+                  height: 32,
+                ),
+              ),
+              const SizedBox(width: 10),
               const Text(
                 "WashSync",
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+                  fontSize: 20, // slightly bigger
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
                 ),
               ),
             ],
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.white),
-            onPressed: () async {
-              await FirebaseAuth.instance.signOut();
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(builder: (_) => const SignInPage()),
-                (_) => false,
-              );
-            },
           ),
         ],
       ),
     );
   }
 
-  // 👤 USER CARD (FIXED)
+  /// ---------------- USER CARD ----------------
   Widget _userCard(User user) {
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance
@@ -197,7 +212,9 @@ class _HomePageState extends State<HomePage> {
           return const CircularProgressIndicator();
         }
 
+
         final data = snapshot.data!.data() as Map<String, dynamic>;
+
 
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -243,7 +260,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // 📊 STATS (ALREADY CORRECT, JUST CLEAN)
+  /// ---------------- STATS ----------------
   Widget _stats(User user) {
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance
@@ -255,7 +272,9 @@ class _HomePageState extends State<HomePage> {
           return const SizedBox();
         }
 
+
         final data = snapshot.data!.data() as Map<String, dynamic>;
+
 
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -274,6 +293,7 @@ class _HomePageState extends State<HomePage> {
       },
     );
   }
+
 
   Widget _statCard(String value, String label, IconData icon) {
     return Expanded(
@@ -307,8 +327,9 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // 🧺 WASHER
+  /// ---------------- MACHINE CARD ----------------
   Widget _washerCard() {
+    const SizedBox(height: 24);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: StreamBuilder<DocumentSnapshot>(
@@ -320,11 +341,13 @@ class _HomePageState extends State<HomePage> {
           int available = 0;
           int total = 0;
 
+
           if (snapshot.hasData && snapshot.data!.exists) {
             final data = snapshot.data!.data() as Map<String, dynamic>;
             available = data['available'] ?? 0;
             total = data['total'] ?? 0;
           }
+
 
           return _machineCard(
             title: "Washer",
@@ -346,6 +369,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+
   // 🔥 DRYER
   Widget _dryerCard() {
     return Padding(
@@ -359,11 +383,13 @@ class _HomePageState extends State<HomePage> {
           int available = 0;
           int total = 0;
 
+
           if (snapshot.hasData && snapshot.data!.exists) {
             final data = snapshot.data!.data() as Map<String, dynamic>;
             available = data['available'] ?? 0;
             total = data['total'] ?? 0;
           }
+
 
           return _machineCard(
             title: "Dryer",
@@ -384,43 +410,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // ignore: unused_element
-  Widget _machineStreamCard({
-    required String docId,
-    required String title,
-    required IconData icon,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('machines')
-          .doc(docId)
-          .snapshots(),
-      builder: (context, snapshot) {
-        int available = 0;
-        int total = 0;
-
-        if (snapshot.hasData && snapshot.data!.exists) {
-          final data = snapshot.data!.data() as Map<String, dynamic>;
-          available = data['available'] ?? 0;
-          total = data['total'] ?? 0;
-        }
-
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: _machineCard(
-            title: title,
-            subtitle: "$available of $total available",
-            icon: icon,
-            color: color,
-            onTap: onTap,
-          ),
-        );
-      },
-    );
-  }
-
   Widget _machineCard({
     required String title,
     required String subtitle,
@@ -428,18 +417,21 @@ class _HomePageState extends State<HomePage> {
     required Color color,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 20,
-          vertical: 18,
-        ),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
         decoration: BoxDecoration(
           color: color,
           borderRadius: BorderRadius.circular(16),
           boxShadow: const [
-            BoxShadow(color: Colors.black26, blurRadius: 6),
+            BoxShadow(
+              color: Colors.black26,
+              blurRadius: 10,
+              offset: Offset(0, 6), // 👈 pop effect
+            ),
           ],
         ),
         child: Row(
@@ -447,8 +439,15 @@ class _HomePageState extends State<HomePage> {
           children: [
             Row(
               children: [
-                Icon(icon, color: Colors.white, size: 36),
-                const SizedBox(width: 12),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.25),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: Colors.white, size: 30),
+                ),
+                const SizedBox(width: 14),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -460,6 +459,7 @@ class _HomePageState extends State<HomePage> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
+                    const SizedBox(height: 4),
                     Text(
                       subtitle,
                       style: const TextStyle(
@@ -471,99 +471,114 @@ class _HomePageState extends State<HomePage> {
                 ),
               ],
             ),
-            const Icon(Icons.arrow_forward_ios, color: Colors.white),
+            const Icon(Icons.chevron_right, color: Colors.white, size: 28),
           ],
         ),
       ),
     );
   }
 
-  // ⬇️ BOTTOM NAV
-  Widget _bottomNav() {
-    return SizedBox(
-      height: 80,
-      child: Stack(
-        alignment: Alignment.bottomCenter,
-        children: [
-          /// BACKGROUND BAR
-          Container(
-            height: 60,
-            margin: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(
-              color: const Color(0xFFB48DD6),
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: const [
-                BoxShadow(
-                  color: Colors.black26,
-                  blurRadius: 8,
-                  offset: Offset(0, -2),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _navItem(navItems[0]),
-                _navItem(navItems[1]),
-                const SizedBox(width: 40), // center button space
-                _navItem(navItems[2]),
-                _navItem(navItems[3]),
-              ],
-            ),
-          ),
 
-          /// CENTER FLOATING HOME BUTTON
-          Positioned(
-            top: 0,
-            child: GestureDetector(
-              onTap: () {
-                // already on Home
-              },
-              child: Container(
-                width: 64,
-                height: 64,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Color(0xFF8A3FFC),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black26,
-                      blurRadius: 10,
-                      offset: Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.home,
-                  color: Colors.white,
-                  size: 32,
-                ),
-              ),
-            ),
+  /// ---------------- BOTTOM NAV ----------------
+  Widget _bottomNav(List<NavItem> items) {
+    return Container(
+      height: 70,
+      margin: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFB48DD6),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black26,
+            blurRadius: 10,
+            offset: Offset(0, 4),
           ),
         ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: List.generate(
+          items.length,
+          (index) => _navItem(
+            item: items[index],
+            isActive: _currentIndex == index,
+            onTap: () {
+              setState(() => _currentIndex = index);
+              items[index].onTap();
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+
+  Widget _navItem({
+    required NavItem item,
+    required bool isActive,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive
+              ? Colors.white.withOpacity(0.25)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              item.icon,
+              color: Colors.white,
+              size: isActive ? 28 : 24,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              item.label,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight:
+                    isActive ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-// 🔹 NAV ITEM
-Widget _navItem(NavItem item) {
-  return GestureDetector(
-    onTap: item.onTap,
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
+/// ---------------- STAT BOX ----------------
+/*class _StatBox extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _StatBox({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
       children: [
-        Icon(item.icon, color: Colors.white, size: 24),
-        const SizedBox(height: 2),
         Text(
-          item.label,
+          value,
           style: const TextStyle(
             color: Colors.white,
-            fontSize: 12,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
           ),
         ),
+        Text(
+          label,
+          style: const TextStyle(color: Colors.white70),
+        ),
       ],
-    ),
-  );
-}
+    );
+  }
+}*/
