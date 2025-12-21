@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+
+// Your Team's Pages
 import 'sign_in_page.dart';
-import 'report_page.dart';           // Your import
-import 'feedback_rating_page.dart';   // Your import
+import 'report_page.dart';           
+import 'feedback_rating_page.dart';   
+
+// YOUR Wallet & Payment Pages
+import 'wallet_page.dart';
+import 'payment_screen.dart';
 
 class NavItem {
   final IconData icon;
@@ -15,19 +21,6 @@ class NavItem {
     required this.label,
     required this.onTap,
   });
-}
-
-// Keep these machine pages for now
-class WasherPage extends StatelessWidget {
-  const WasherPage({super.key});
-  @override
-  Widget build(BuildContext context) => Scaffold(appBar: AppBar(title: const Text("Washer")), body: const Center(child: Text("Washer Page")));
-}
-
-class DryerPage extends StatelessWidget {
-  const DryerPage({super.key});
-  @override
-  Widget build(BuildContext context) => Scaffold(appBar: AppBar(title: const Text("Dryer")), body: const Center(child: Text("Dryer Page")));
 }
 
 class HomePage extends StatefulWidget {
@@ -44,7 +37,6 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
 
-    // Merging your navigation into your friend's bottom bar
     navItems = [
       NavItem(
         icon: Icons.person_outline,
@@ -54,23 +46,20 @@ class _HomePageState extends State<HomePage> {
       NavItem(
         icon: Icons.history,
         label: "History",
-        onTap: () { /* Add History logic later */ },
+        onTap: () {
+          // Passing -1.0 to ensure WalletPage opens in "Viewing/Reload" mode
+          Navigator.push(context, MaterialPageRoute(builder: (context) => const WalletPage(amountToDeduct: -1.0)));
+        },
       ),
       NavItem(
         icon: Icons.report_outlined,
         label: "Report",
-        onTap: () {
-          // YOUR NAVIGATION LOGIC
-          Navigator.push(context, MaterialPageRoute(builder: (context) => const ReportPage()));
-        },
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ReportPage())),
       ),
       NavItem(
         icon: Icons.feedback_outlined,
         label: "Feedback",
-        onTap: () {
-          // YOUR NAVIGATION LOGIC
-          Navigator.push(context, MaterialPageRoute(builder: (context) => const FeedbackRatingPage()));
-        },
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const FeedbackRatingPage())),
       ),
     ];
   }
@@ -105,7 +94,8 @@ class _HomePageState extends State<HomePage> {
                 padding: EdgeInsets.symmetric(horizontal: 16),
                 child: Align(
                   alignment: Alignment.centerLeft,
-                  child: Text("Machines", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                  child: Text("Machines", 
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
                 ),
               ),
               const SizedBox(height: 12),
@@ -131,7 +121,9 @@ class _HomePageState extends State<HomePage> {
         children: [
           Row(
             children: [
-              Image.asset("assets/icons/logoWashSync.png", height: 30, errorBuilder: (context, error, stackTrace) => const Icon(Icons.local_laundry_service, color: Colors.white)),
+              Image.asset("assets/icons/logoWashSync.png", 
+                height: 30, 
+                errorBuilder: (context, error, stackTrace) => const Icon(Icons.local_laundry_service, color: Colors.white)),
               const SizedBox(width: 8),
               const Text("WashSync", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
             ],
@@ -152,7 +144,7 @@ class _HomePageState extends State<HomePage> {
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData || !snapshot.data!.exists) return const Center(child: CircularProgressIndicator());
+        if (!snapshot.hasData || !snapshot.data!.exists) return const SizedBox(height: 80);
         final data = snapshot.data!.data() as Map<String, dynamic>;
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -166,9 +158,9 @@ class _HomePageState extends State<HomePage> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text("Hello 👋"),
+                    const Text("Hello 👋", style: TextStyle(color: Colors.grey, fontSize: 12)),
                     Text(data['username'] ?? "User", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    Text(data['email'] ?? "", style: const TextStyle(color: Colors.purple)),
+                    Text(data['email'] ?? "", style: const TextStyle(color: Colors.purple, fontSize: 11)),
                   ],
                 ),
               ],
@@ -185,15 +177,24 @@ class _HomePageState extends State<HomePage> {
       builder: (context, snapshot) {
         if (!snapshot.hasData || !snapshot.data!.exists) return const SizedBox();
         final data = snapshot.data!.data() as Map<String, dynamic>;
+        
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
               _statCard("${data['totalUses'] ?? 0}", "Total Uses", Icons.show_chart),
-              const SizedBox(width: 10),
-              _statCard("RM ${data['balance'] ?? 0}", "Balance", Icons.account_balance_wallet),
-              const SizedBox(width: 10),
-              _statCard("${data['vouchers'] ?? 0}", "Vouchers", Icons.confirmation_number),
+              const SizedBox(width: 12), // Adjusted spacing now that there are only two cards
+              
+              // Wallet balance card (Voucher card removed)
+              Expanded(
+                child: GestureDetector(
+                  onTap: () {
+                    // Using -1.0 to trigger "Viewing Mode" in WalletPage
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const WalletPage(amountToDeduct: -1.0)));
+                  },
+                  child: _statCard("RM ${(data['balance'] ?? 0).toDouble().toStringAsFixed(2)}", "Balance", Icons.account_balance_wallet),
+                ),
+              ),
             ],
           ),
         );
@@ -202,27 +203,39 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _statCard(String value, String label, IconData icon) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
-        child: Column(
-          children: [
-            Icon(icon, color: Colors.purple),
-            Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            Text(label, style: const TextStyle(color: Colors.purple, fontSize: 10)),
-          ],
-        ),
+    return Container(
+      // Padding adjusted to fill space nicely with two cards
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+      child: Column(
+        children: [
+          Icon(icon, color: Colors.purple, size: 24),
+          const SizedBox(height: 8),
+          Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          Text(label, style: const TextStyle(color: Colors.purple, fontSize: 12, fontWeight: FontWeight.w500)),
+        ],
       ),
     );
   }
 
   Widget _washerCard() {
-    return _machineStreamCard(docId: 'washer', title: 'Washer', icon: Icons.local_laundry_service, color: const Color(0xFF9B59B6), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WasherPage())));
+    return _machineStreamCard(
+      docId: 'washer', 
+      title: 'Washer', 
+      icon: Icons.local_laundry_service, 
+      color: const Color(0xFF9B59B6), 
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PaymentScreen()))
+    );
   }
 
   Widget _dryerCard() {
-    return _machineStreamCard(docId: 'dryer', title: 'Dryer', icon: Icons.dry, color: const Color(0xFFB97AD9), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DryerPage())));
+    return _machineStreamCard(
+      docId: 'dryer', 
+      title: 'Dryer', 
+      icon: Icons.dry, 
+      color: const Color(0xFFB97AD9), 
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PaymentScreen()))
+    );
   }
 
   Widget _machineStreamCard({required String docId, required String title, required IconData icon, required Color color, required VoidCallback onTap}) {
@@ -235,36 +248,45 @@ class _HomePageState extends State<HomePage> {
           available = data['available'] ?? 0;
           total = data['total'] ?? 0;
         }
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: _machineCardUI(title: title, subtitle: "$available of $total available", icon: icon, color: color, onTap: onTap),
-        );
+        return _machineCardUI(title: title, subtitle: "$available of $total available", icon: icon, color: color, onTap: onTap);
       },
     );
   }
 
   Widget _machineCardUI({required String title, required String subtitle, required IconData icon, required Color color, required VoidCallback onTap}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(16)),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color, 
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: color.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))],
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.white, size: 40),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(icon, color: Colors.white, size: 36),
-                const SizedBox(width: 12),
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                  Text(subtitle, style: const TextStyle(color: Colors.white70, fontSize: 14)),
-                ]),
+                Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                Text(subtitle, style: const TextStyle(color: Colors.white70, fontSize: 13)),
               ],
             ),
-            const Icon(Icons.arrow_forward_ios, color: Colors.white),
-          ],
-        ),
+          ),
+          ElevatedButton(
+            onPressed: onTap,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: color,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              elevation: 0,
+            ),
+            child: const Text("PAY NOW", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ],
       ),
     );
   }
@@ -277,7 +299,7 @@ class _HomePageState extends State<HomePage> {
         children: [
           Container(
             height: 60,
-            margin: const EdgeInsets.symmetric(horizontal: 16),
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(color: const Color(0xFFB48DD6), borderRadius: BorderRadius.circular(24)),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -290,7 +312,17 @@ class _HomePageState extends State<HomePage> {
               ],
             ),
           ),
-          Positioned(top: 0, child: CircleAvatar(radius: 32, backgroundColor: const Color(0xFF8A3FFC), child: IconButton(icon: const Icon(Icons.home, color: Colors.white, size: 32), onPressed: () {}))),
+          Positioned(
+            top: 0, 
+            child: CircleAvatar(
+              radius: 32, 
+              backgroundColor: const Color(0xFF8A3FFC), 
+              child: IconButton(
+                icon: const Icon(Icons.home, color: Colors.white, size: 32), 
+                onPressed: () {}
+              )
+            )
+          ),
         ],
       ),
     );
@@ -299,10 +331,13 @@ class _HomePageState extends State<HomePage> {
   Widget _navItemUI(NavItem item) {
     return GestureDetector(
       onTap: item.onTap,
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Icon(item.icon, color: Colors.white, size: 24),
-        Text(item.label, style: const TextStyle(color: Colors.white, fontSize: 12)),
-      ]),
+      child: Column(
+        mainAxisSize: MainAxisSize.min, 
+        children: [
+          Icon(item.icon, color: Colors.white, size: 22),
+          Text(item.label, style: const TextStyle(color: Colors.white, fontSize: 10)),
+        ]
+      ),
     );
   }
 }
