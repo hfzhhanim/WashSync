@@ -83,7 +83,7 @@ class _SignUpStep3PasswordState extends State<SignUpStep3Password> {
       /// 4️⃣ GO TO SIGN IN
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => SignInPage()),
+        MaterialPageRoute(builder: (_) => const SignInPage()),
         (_) => false,
       );
     } on FirebaseAuthException catch (e) {

@@ -1,12 +1,8 @@
-// ignore_for_file: prefer_const_constructors
-
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
-// ✅ USE ONLY THIS IMPORT (IMPORTANT)
-import 'package:washsync_app/signup_step1_name.dart';
-
+import 'signup_step1_name.dart';
 import 'home_page.dart';
+///import 'admin_sign_in_page.dart';
 
 class SignInPage extends StatefulWidget {
   const SignInPage({super.key});
@@ -141,6 +137,7 @@ class _SignInPageState extends State<SignInPage> {
                         ),
                       ),
 
+
                       const SizedBox(height: 30),
 
                       const Text("Email"),
@@ -211,8 +208,7 @@ class _SignInPageState extends State<SignInPage> {
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (_) =>
-                                          const SignUpStep1Name(),
+                                      builder: (_) => const SignUpStep1Name(),
                                     ),
                                   );
                                 },
@@ -228,6 +224,25 @@ class _SignInPageState extends State<SignInPage> {
                           ),
 
                           const SizedBox(height: 10),
+
+                          /*GestureDetector(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const AdminSignInPage(),
+                                ),
+                              );
+                            },
+                            child: const Text(
+                              "Sign in as Administrator",
+                              style: TextStyle(
+                                color: Colors.deepPurple,
+                                fontWeight: FontWeight.w600,
+                                decoration: TextDecoration.underline,
+                              ),
+                            ),
+                          ),*/
                         ],
                       ),
                     ],
@@ -269,7 +284,7 @@ class _SignInPageState extends State<SignInPage> {
             ),
           ),
 
-          /// 👁️ PASSWORD TOGGLE
+          /// 👁️ EYE ICON (ONLY FOR PASSWORD)
           if (isPassword)
             IconButton(
               icon: Icon(

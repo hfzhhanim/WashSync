@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'sign_in_page.dart';
 import 'signup_step2_email.dart';
 
 class SignUpStep1Name extends StatefulWidget {
@@ -86,12 +87,12 @@ class _SignUpStep1NameState extends State<SignUpStep1Name> {
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: Colors.purple,
+                              color: Colors.purple.shade100,
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: const Icon(
                               Icons.person,
-                              color: Colors.white,
+                              color: Colors.purple,
                             ),
                           ),
                         ],
@@ -108,10 +109,10 @@ class _SignUpStep1NameState extends State<SignUpStep1Name> {
 
                       /// PROGRESS
                       Row(
-                        children: const [
-                          _ProgressBar(active: true),
-                          _ProgressBar(),
-                          _ProgressBar(),
+                        children: [
+                          _progressBar(active: true),
+                          _progressBar(),
+                          _progressBar(),
                         ],
                       ),
 
@@ -142,7 +143,7 @@ class _SignUpStep1NameState extends State<SignUpStep1Name> {
 
                       const SizedBox(height: 12),
 
-                      /// INFO BOX
+                      // Info box
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -151,9 +152,9 @@ class _SignUpStep1NameState extends State<SignUpStep1Name> {
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
-                          children: const [
+                          children: [
                             Row(
-                              children: [
+                              children: const [
                                 Icon(
                                   Icons.help_outline,
                                   color: Colors.purple,
@@ -169,14 +170,19 @@ class _SignUpStep1NameState extends State<SignUpStep1Name> {
                                 ),
                               ],
                             ),
-                            SizedBox(height: 6),
-                            Text(
+
+
+                            const SizedBox(height: 6),
+
+
+                            const Text(
                               "We’ll use your name to personalize your laundry service experience.",
                               style: TextStyle(fontSize: 13),
                             ),
                           ],
                         ),
                       ),
+
 
                       const SizedBox(height: 20),
 
@@ -231,14 +237,20 @@ class _SignUpStep1NameState extends State<SignUpStep1Name> {
 
                 const SizedBox(height: 20),
 
-                /// SIGN IN (NO CIRCULAR IMPORT)
+                /// SIGN IN
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const Text("Already have an account? "),
                     GestureDetector(
                       onTap: () {
-                        Navigator.pop(context);
+                        Navigator.pushAndRemoveUntil(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const SignInPage(),
+                          ),
+                          (_) => false,
+                        );
                       },
                       child: const Text(
                         "Sign in",
@@ -260,7 +272,20 @@ class _SignUpStep1NameState extends State<SignUpStep1Name> {
     );
   }
 
-  static Widget _inputField({
+  Widget _progressBar({bool active = false}) {
+    return Expanded(
+      child: Container(
+        height: 6,
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+        decoration: BoxDecoration(
+          color: active ? Colors.purple : Colors.grey.shade300,
+          borderRadius: BorderRadius.circular(10),
+        ),
+      ),
+    );
+  }
+
+  Widget _inputField({
     required String label,
     required String hint,
     required TextEditingController controller,
@@ -281,27 +306,6 @@ class _SignUpStep1NameState extends State<SignUpStep1Name> {
           ),
         ),
       ],
-    );
-  }
-}
-
-/// 🔹 Progress Bar Widget (No context dependency)
-class _ProgressBar extends StatelessWidget {
-  final bool active;
-
-  const _ProgressBar({this.active = false});
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        height: 6,
-        margin: const EdgeInsets.symmetric(horizontal: 4),
-        decoration: BoxDecoration(
-          color: active ? Colors.purple : Colors.grey.shade300,
-          borderRadius: BorderRadius.circular(10),
-        ),
-      ),
     );
   }
 }
