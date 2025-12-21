@@ -18,7 +18,7 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[50], // Light background to make the table pop
+      backgroundColor: Colors.grey[50],
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(30.0),
         child: Column(
@@ -43,8 +43,8 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
             _buildTableContainer(),
 
             const SizedBox(height: 30),
-
-            // 3. DETAIL VIEW (Conditional)
+            
+            // 3. DETAIL VIEW
             if (_selectedReportData != null) _buildDetailView(),
           ],
         ),
@@ -52,7 +52,17 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
     );
   }
 
+  String _getMachineNumber(dynamic val) {
+    if (val == null) return '-';
+    if (val is int) return val.toString();
+    if (val is String) {
+      return int.tryParse(val)?.toString() ?? '-';
+    }
+    return '-';
+  }
+
   Widget _buildFilterBar() {
+    // UPDATED: Filter labels to All, Pending, Resolved
     return Row(
       children: ['All', 'Pending', 'Resolved'].map((status) {
         bool isSelected = _selectedFilter == status;
@@ -63,7 +73,7 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
             selected: isSelected,
             onSelected: (val) => setState(() {
               _selectedFilter = status;
-              _selectedReportData = null; // Close details when switching filters
+              _selectedReportData = null; 
             }),
             selectedColor: Colors.purple[100],
             checkmarkColor: Colors.purple,
@@ -83,17 +93,25 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(15),
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)],
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
       ),
       child: StreamBuilder<QuerySnapshot>(
         stream: _reportService.getReportsStream(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) return const LinearProgressIndicator();
 
+          // UPDATED: Filtering Logic
           var docs = snapshot.data!.docs.where((doc) {
             var data = doc.data() as Map<String, dynamic>;
             String status = data['status'] ?? 'Pending';
+            
             if (_selectedFilter == 'All') return true;
+            
+            if (_selectedFilter == 'Pending') {
+              // Show both 'Pending' and 'New' status reports under the Pending filter
+              return status.toLowerCase() == 'pending' || status.toLowerCase() == 'new';
+            }
+            
             return status.toLowerCase() == _selectedFilter.toLowerCase();
           }).toList();
 
@@ -116,7 +134,7 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
 
               return DataRow(
                 onSelectChanged: (_) {
-                   setState(() {
+                  setState(() {
                     _selectedReportData = data;
                     _selectedReportId = doc.id;
                   });
@@ -124,20 +142,27 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
                 cells: [
                   DataCell(Text('#${doc.id.substring(0, 5)}')),
                   DataCell(Text(data['machineType'] ?? data['category'] ?? 'Washer')),
-                  DataCell(Text(data['machineNumber']?.toString() ?? '-')),
+                  DataCell(Text(_getMachineNumber(data['machineNumber']))),
                   DataCell(SizedBox(width: 150, child: Text(data['issueType'] ?? 'Other', overflow: TextOverflow.ellipsis))),
                   DataCell(_buildStatusBadge(status)),
                   DataCell(
-                    TextButton.icon(
-                      icon: Icon(isResolved ? Icons.visibility : Icons.build_circle_outlined, size: 18),
-                      label: Text(isResolved ? 'View' : 'View / Resolve'),
-                      onPressed: () {
-                        setState(() {
+                    isResolved 
+                    ? TextButton.icon(
+                        icon: const Icon(Icons.visibility, size: 18, color: Colors.blue),
+                        label: const Text('View', style: TextStyle(color: Colors.blue)),
+                        onPressed: () => setState(() {
                           _selectedReportData = data;
                           _selectedReportId = doc.id;
-                        });
-                      },
-                    ),
+                        }),
+                      )
+                    : TextButton.icon(
+                        icon: const Icon(Icons.build_circle_outlined, size: 18, color: Colors.orange),
+                        label: const Text('Resolve', style: TextStyle(color: Colors.orange)),
+                        onPressed: () => setState(() {
+                          _selectedReportData = data;
+                          _selectedReportId = doc.id;
+                        }),
+                      ),
                   ),
                 ],
               );
@@ -150,6 +175,12 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
 
   Widget _buildDetailView() {
     bool isResolved = _selectedReportData!['status']?.toString().toLowerCase() == 'resolved';
+    
+    String displayName = _selectedReportData!['userName'] ?? 
+                        _selectedReportData!['username'] ?? 
+                        _selectedReportData!['name'] ?? 
+                        _selectedReportData!['displayName'] ??
+                        'Unknown User';
 
     return Container(
       width: double.infinity,
@@ -171,13 +202,13 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
           ),
           const Divider(),
           const SizedBox(height: 15),
-          Row(
+          Wrap( 
+            spacing: 40,
+            runSpacing: 20,
             children: [
-              _infoTile('Machine', _selectedReportData!['machineType'] ?? _selectedReportData!['category']),
-              const SizedBox(width: 50),
-              _infoTile('Machine No.', _selectedReportData!['machineNumber']?.toString()),
-              const SizedBox(width: 50),
-              _infoTile('Reported By', _selectedReportData!['userName'] ?? 'User'),
+              _infoTile('Machine', (_selectedReportData!['machineType'] ?? _selectedReportData!['category'] ?? 'Unknown').toString()),
+              _infoTile('Machine No.', _getMachineNumber(_selectedReportData!['machineNumber'])),
+              _infoTile('Reported By', displayName), 
             ],
           ),
           const SizedBox(height: 25),
@@ -195,9 +226,13 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
               onPressed: () async {
-                await _reportService.updateReportStatus(_selectedReportId!, 'Resolved');
-                setState(() => _selectedReportData = null);
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Report Marked as Resolved')));
+                if (_selectedReportId != null) {
+                  await _reportService.updateReportStatus(_selectedReportId!, 'Resolved');
+                  setState(() => _selectedReportData = null);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Report Marked as Resolved')));
+                  }
+                }
               },
               child: const Text('Mark as Resolved'),
             ),
@@ -206,12 +241,12 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
     );
   }
 
-  Widget _infoTile(String label, dynamic value) {
+  Widget _infoTile(String label, String value) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-        Text(value?.toString() ?? '-', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
       ],
     );
   }
