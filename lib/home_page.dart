@@ -2,26 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-// Your Team's Pages
+// Team's Pages (Relative paths from lib/ folder)
 import 'sign_in_page.dart';
 import 'report_page.dart';           
 import 'feedback_rating_page.dart';   
 
-// YOUR Wallet & Payment Pages
-import 'wallet_page.dart';
-import 'payment_screen.dart';
-
-class NavItem {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  NavItem({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-}
+// YOUR Wallet & Payment Pages (Inside the screens folder)
+import 'screens/wallet_page.dart';
+import 'screens/payment_screen.dart';
+import 'screens/washer_page.dart';
+import 'screens/dryer_page.dart';
+import 'screens/profile_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -31,37 +22,11 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  late final List<NavItem> navItems;
-
-  @override
-  void initState() {
-    super.initState();
-
-    navItems = [
-      NavItem(
-        icon: Icons.person_outline,
-        label: "Profile",
-        onTap: () { /* Add Profile logic later */ },
-      ),
-      NavItem(
-        icon: Icons.history,
-        label: "History",
-        onTap: () {
-          // Passing -1.0 to ensure WalletPage opens in "Viewing/Reload" mode
-          Navigator.push(context, MaterialPageRoute(builder: (context) => const WalletPage(amountToDeduct: -1.0)));
-        },
-      ),
-      NavItem(
-        icon: Icons.report_outlined,
-        label: "Report",
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ReportPage())),
-      ),
-      NavItem(
-        icon: Icons.feedback_outlined,
-        label: "Feedback",
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const FeedbackRatingPage())),
-      ),
-    ];
+  
+  void _navigateTo(Widget page) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (context) => page),
+    );
   }
 
   @override
@@ -73,7 +38,10 @@ class _HomePageState extends State<HomePage> {
     }
 
     return Scaffold(
+      extendBody: true, 
       body: Container(
+        width: double.infinity,
+        height: double.infinity,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             colors: [Color(0xFFD8B4F8), Color(0xFFC084FC)],
@@ -82,28 +50,100 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
         child: SafeArea(
+          bottom: false,
           child: Column(
             children: [
-              _topBar(context),
-              const SizedBox(height: 16),
+              _topBar(),
+              const SizedBox(height: 10),
               _userCard(user),
-              const SizedBox(height: 16),
-              _stats(user),
-              const SizedBox(height: 20),
+              const SizedBox(height: 15),
+              _statsSection(user), // 2 Equal sized boxes
+              const SizedBox(height: 25),
+              
               const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16),
+                padding: EdgeInsets.symmetric(horizontal: 20),
                 child: Align(
                   alignment: Alignment.centerLeft,
-                  child: Text("Machines", 
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                  child: Text("Select Service", 
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
                 ),
               ),
+              const SizedBox(height: 15),
+
+              // Service Selection Cards
+              _serviceNavigationCard(
+                title: "Washer",
+                subtitle: "5 machines available",
+                icon: Icons.local_laundry_service,
+                color: const Color(0xFF9B59B6),
+                onTap: () => _navigateTo(const WasherPage()),
+              ),
               const SizedBox(height: 12),
-              _washerCard(),
-              const SizedBox(height: 12),
-              _dryerCard(),
-              const Spacer(),
-              _bottomNav(),
+              _serviceNavigationCard(
+                title: "Dryer",
+                subtitle: "5 machines available",
+                icon: Icons.dry,
+                color: const Color(0xFFB97AD9),
+                onTap: () => _navigateTo(const DryerPage()),
+              ),
+            ],
+          ),
+        ),
+      ),
+      bottomNavigationBar: _buildBottomNav(),
+    );
+  }
+
+  // --- STATS SECTION: 2 Equal Boxes (Voucher Removed) ---
+  Widget _statsSection(User user) {
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const SizedBox(height: 100);
+        final data = snapshot.data!.data() as Map<String, dynamic>? ?? {};
+        double bal = (data['balance'] ?? 0.0).toDouble();
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Row(
+            children: [
+              // Left: Total Uses (Equal Size)
+              Expanded(
+                child: _statBox("${data['totalUses'] ?? 0}", "Total Uses", Icons.auto_graph, null)
+              ),
+              const SizedBox(width: 15),
+              // Right: Wallet Balance (Equal Size & Clickable)
+              Expanded(
+                child: _statBox(
+                  "RM ${bal.toStringAsFixed(2)}", 
+                  "Balance", 
+                  Icons.account_balance_wallet,
+                  () => _navigateTo(const WalletPage(amountToDeduct: -1.0)),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _statBox(String val, String label, IconData icon, VoidCallback? onTap) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: Colors.purple, size: 28),
+              const SizedBox(height: 8),
+              Text(val, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
             ],
           ),
         ),
@@ -111,29 +151,51 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // --- UI Components ---
-
-  Widget _topBar(BuildContext context) {
+  // --- SERVICE NAVIGATION CARDS ---
+  Widget _serviceNavigationCard({required String title, required String subtitle, required IconData icon, required Color color, required VoidCallback onTap}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 8, offset: const Offset(0, 4))],
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: Colors.white, size: 40),
+              const SizedBox(width: 15),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                    Text(subtitle, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 18),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _topBar() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              Image.asset("assets/icons/logoWashSync.png", 
-                height: 30, 
-                errorBuilder: (context, error, stackTrace) => const Icon(Icons.local_laundry_service, color: Colors.white)),
-              const SizedBox(width: 8),
-              const Text("WashSync", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-            ],
-          ),
+          const Text("WashSync", style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
           IconButton(
-            icon: const Icon(Icons.logout, color: Colors.white),
-            onPressed: () async {
-              await FirebaseAuth.instance.signOut();
-              Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const SignInPage()), (_) => false);
-            },
+            icon: const Icon(Icons.logout_rounded, color: Colors.white),
+            onPressed: () => FirebaseAuth.instance.signOut(),
           ),
         ],
       ),
@@ -144,199 +206,59 @@ class _HomePageState extends State<HomePage> {
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData || !snapshot.data!.exists) return const SizedBox(height: 80);
-        final data = snapshot.data!.data() as Map<String, dynamic>;
+        String name = "User";
+        if (snapshot.hasData && snapshot.data!.exists) {
+          name = (snapshot.data!.data() as Map<String, dynamic>)['username'] ?? "User";
+        }
         return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+            padding: const EdgeInsets.all(15),
+            decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(20)),
             child: Row(
               children: [
-                const CircleAvatar(radius: 28, backgroundColor: Colors.purple, child: Icon(Icons.person, color: Colors.white)),
-                const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text("Hello 👋", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                    Text(data['username'] ?? "User", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    Text(data['email'] ?? "", style: const TextStyle(color: Colors.purple, fontSize: 11)),
-                  ],
-                ),
+                const CircleAvatar(backgroundColor: Colors.white, child: Icon(Icons.person, color: Colors.purple)),
+                const SizedBox(width: 15),
+                Text("Welcome back, $name!", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
               ],
             ),
           ),
         );
-      },
+      }
     );
   }
 
-  Widget _stats(User user) {
-    return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData || !snapshot.data!.exists) return const SizedBox();
-        final data = snapshot.data!.data() as Map<String, dynamic>;
-        
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            children: [
-              _statCard("${data['totalUses'] ?? 0}", "Total Uses", Icons.show_chart),
-              const SizedBox(width: 12), // Adjusted spacing now that there are only two cards
-              
-              // Wallet balance card (Voucher card removed)
-              Expanded(
-                child: GestureDetector(
-                  onTap: () {
-                    // Using -1.0 to trigger "Viewing Mode" in WalletPage
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => const WalletPage(amountToDeduct: -1.0)));
-                  },
-                  child: _statCard("RM ${(data['balance'] ?? 0).toDouble().toStringAsFixed(2)}", "Balance", Icons.account_balance_wallet),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _statCard(String value, String label, IconData icon) {
+  Widget _buildBottomNav() {
     return Container(
-      // Padding adjusted to fill space nicely with two cards
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
-      child: Column(
-        children: [
-          Icon(icon, color: Colors.purple, size: 24),
-          const SizedBox(height: 8),
-          Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          Text(label, style: const TextStyle(color: Colors.purple, fontSize: 12, fontWeight: FontWeight.w500)),
-        ],
-      ),
-    );
-  }
-
-  Widget _washerCard() {
-    return _machineStreamCard(
-      docId: 'washer', 
-      title: 'Washer', 
-      icon: Icons.local_laundry_service, 
-      color: const Color(0xFF9B59B6), 
-      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PaymentScreen()))
-    );
-  }
-
-  Widget _dryerCard() {
-    return _machineStreamCard(
-      docId: 'dryer', 
-      title: 'Dryer', 
-      icon: Icons.dry, 
-      color: const Color(0xFFB97AD9), 
-      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PaymentScreen()))
-    );
-  }
-
-  Widget _machineStreamCard({required String docId, required String title, required IconData icon, required Color color, required VoidCallback onTap}) {
-    return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('machines').doc(docId).snapshots(),
-      builder: (context, snapshot) {
-        int available = 0, total = 0;
-        if (snapshot.hasData && snapshot.data!.exists) {
-          final data = snapshot.data!.data() as Map<String, dynamic>;
-          available = data['available'] ?? 0;
-          total = data['total'] ?? 0;
-        }
-        return _machineCardUI(title: title, subtitle: "$available of $total available", icon: icon, color: color, onTap: onTap);
-      },
-    );
-  }
-
-  Widget _machineCardUI({required String title, required String subtitle, required IconData icon, required Color color, required VoidCallback onTap}) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(16),
+      height: 70,
+      margin: const EdgeInsets.fromLTRB(20, 0, 20, 25),
       decoration: BoxDecoration(
-        color: color, 
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: color.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))],
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 20)],
       ),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          Icon(icon, color: Colors.white, size: 40),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                Text(subtitle, style: const TextStyle(color: Colors.white70, fontSize: 13)),
-              ],
-            ),
-          ),
-          ElevatedButton(
-            onPressed: onTap,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: color,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              elevation: 0,
-            ),
-            child: const Text("PAY NOW", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-          ),
+          _navIcon(Icons.history, "History", () => _navigateTo(const WalletPage(amountToDeduct: -1.0))),
+          _navIcon(Icons.report_problem_outlined, "Report", () => _navigateTo(const ReportPage())),
+          const CircleAvatar(radius: 25, backgroundColor: Colors.purple, child: Icon(Icons.home, color: Colors.white)),
+          _navIcon(Icons.rate_review_outlined, "Feedback", () => _navigateTo(const FeedbackRatingPage())),
+          _navIcon(Icons.person_outline, "Profile", () => _navigateTo(const ProfilePage())),
         ],
       ),
     );
   }
 
-  Widget _bottomNav() {
-    return SizedBox(
-      height: 80,
-      child: Stack(
-        alignment: Alignment.bottomCenter,
-        children: [
-          Container(
-            height: 60,
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(color: const Color(0xFFB48DD6), borderRadius: BorderRadius.circular(24)),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _navItemUI(navItems[0]),
-                _navItemUI(navItems[1]),
-                const SizedBox(width: 40),
-                _navItemUI(navItems[2]),
-                _navItemUI(navItems[3]),
-              ],
-            ),
-          ),
-          Positioned(
-            top: 0, 
-            child: CircleAvatar(
-              radius: 32, 
-              backgroundColor: const Color(0xFF8A3FFC), 
-              child: IconButton(
-                icon: const Icon(Icons.home, color: Colors.white, size: 32), 
-                onPressed: () {}
-              )
-            )
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _navItemUI(NavItem item) {
-    return GestureDetector(
-      onTap: item.onTap,
+  Widget _navIcon(IconData icon, String label, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
       child: Column(
-        mainAxisSize: MainAxisSize.min, 
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(item.icon, color: Colors.white, size: 22),
-          Text(item.label, style: const TextStyle(color: Colors.white, fontSize: 10)),
-        ]
+          Icon(icon, color: Colors.purple, size: 24),
+          Text(label, style: const TextStyle(fontSize: 10, color: Colors.purple)),
+        ],
       ),
     );
   }

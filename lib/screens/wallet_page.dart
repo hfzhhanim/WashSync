@@ -29,7 +29,7 @@ class _WalletPageState extends State<WalletPage> with SingleTickerProviderStateM
 
   // ================= DEDUCTION & PROMO BURN LOGIC =================
   Future<void> _handleWalletPayment(double currentBalance) async {
-    // Only block if they actually owe money they don't have
+    // Allows RM0 payments even if balance is 0. Only blocks if price > balance.
     if (widget.amountToDeduct > 0 && currentBalance < widget.amountToDeduct) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Insufficient Balance!"), backgroundColor: Colors.red),
@@ -61,6 +61,7 @@ class _WalletPageState extends State<WalletPage> with SingleTickerProviderStateM
         });
       });
 
+      if (!mounted) return;
       Navigator.pop(context, true); 
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -75,7 +76,7 @@ class _WalletPageState extends State<WalletPage> with SingleTickerProviderStateM
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFFD8B4F8), Color(0xFFC084FC)],
+            colors: [Color(0xFFA500FF), Color(0xFF6A00F4)],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
@@ -108,7 +109,10 @@ class _WalletPageState extends State<WalletPage> with SingleTickerProviderStateM
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       child: Row(
         children: [
-          IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.pop(context)),
+          IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20), 
+            onPressed: () => Navigator.pop(context)
+          ),
           const Text("WashSync Wallet", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
         ],
       ),
@@ -116,8 +120,6 @@ class _WalletPageState extends State<WalletPage> with SingleTickerProviderStateM
   }
 
   Widget _balanceCard(double balance) {
-    // Logic: If amountToDeduct is >= 0, we are in payment mode. 
-    // If it's -1.0 (from HomePage), we are in viewing mode.
     bool isPaying = widget.amountToDeduct >= 0;
 
     return Container(
@@ -139,7 +141,7 @@ class _WalletPageState extends State<WalletPage> with SingleTickerProviderStateM
               fontWeight: FontWeight.bold, 
               color: (isPaying && widget.amountToDeduct == 0) 
                   ? Colors.green 
-                  : (isPaying && widget.amountToDeduct > 0) ? Colors.red : const Color(0xFF8A3FFC),
+                  : (isPaying && widget.amountToDeduct > 0) ? Colors.red : const Color(0xFFA500FF),
             ),
           ),
           const SizedBox(height: 20),
@@ -148,18 +150,17 @@ class _WalletPageState extends State<WalletPage> with SingleTickerProviderStateM
                 ? () => _handleWalletPayment(balance) 
                 : () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TopUpScreen())),
             style: ElevatedButton.styleFrom(
-              backgroundColor: isPaying 
-                  ? (widget.amountToDeduct == 0 ? Colors.green : const Color(0xFF8A3FFC)) 
-                  : const Color(0xFF8A3FFC),
+              backgroundColor: const Color(0xFFA500FF),
               foregroundColor: Colors.white,
               minimumSize: const Size(double.infinity, 54),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              elevation: 0,
             ),
             child: Text(
               isPaying 
                 ? (widget.amountToDeduct == 0 ? "CLAIM FREE WASH" : "CONFIRM PAYMENT") 
                 : "RELOAD WALLET", 
-              style: const TextStyle(fontWeight: FontWeight.bold),
+              style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.1),
             ),
           )
         ],
@@ -178,9 +179,10 @@ class _WalletPageState extends State<WalletPage> with SingleTickerProviderStateM
           children: [
             TabBar(
               controller: _tabController,
-              labelColor: const Color(0xFF8A3FFC),
+              labelColor: const Color(0xFFA500FF),
               unselectedLabelColor: Colors.grey,
-              indicatorColor: const Color(0xFF8A3FFC),
+              indicatorColor: const Color(0xFFA500FF),
+              indicatorWeight: 3,
               tabs: const [Tab(text: "History"), Tab(text: "Benefits")],
             ),
             Expanded(
@@ -205,6 +207,9 @@ class _WalletPageState extends State<WalletPage> with SingleTickerProviderStateM
           .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+        if (snapshot.data!.docs.isEmpty) {
+          return const Center(child: Text("No transactions yet", style: TextStyle(color: Colors.grey)));
+        }
         return ListView.builder(
           padding: const EdgeInsets.all(16),
           itemCount: snapshot.data!.docs.length,
@@ -212,11 +217,20 @@ class _WalletPageState extends State<WalletPage> with SingleTickerProviderStateM
             var data = snapshot.data!.docs[index];
             bool isNeg = data['amount'].toString().contains('-');
             return ListTile(
-              leading: Icon(
-                isNeg ? Icons.remove_circle_outline : Icons.add_circle_outline, 
-                color: isNeg ? Colors.red : Colors.green,
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: (isNeg ? Colors.red : Colors.green).withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  isNeg ? Icons.shopping_cart_outlined : Icons.account_balance_wallet_outlined, 
+                  color: isNeg ? Colors.red : Colors.green,
+                  size: 20,
+                ),
               ),
               title: Text(data['title'], style: const TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: Text(data['date'].toString().substring(0, 10)), // Show date
               trailing: Text(
                 data['amount'], 
                 style: TextStyle(
@@ -245,11 +259,13 @@ class _WalletPageState extends State<WalletPage> with SingleTickerProviderStateM
           itemBuilder: (context, index) {
             var data = snapshot.data!.docs[index];
             return Card(
+              elevation: 0,
+              color: Colors.grey[50],
               margin: const EdgeInsets.only(bottom: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15), side: BorderSide(color: Colors.grey[200]!)),
               child: ListTile(
-                leading: const Icon(Icons.card_giftcard, color: Colors.orange),
-                title: Text(data.id, style: const TextStyle(fontWeight: FontWeight.bold)),
+                leading: const Icon(Icons.stars, color: Colors.orange),
+                title: Text(data.id, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFA500FF))),
                 subtitle: Text(data['description']),
               ),
             );

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // Added for numeric-only input
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+
+// Your screen imports
 import 'online_banking_popup.dart';
 import 'tng_popup.dart';
 import 'success_popup.dart';
@@ -30,7 +33,16 @@ class _TopUpScreenState extends State<TopUpScreen> {
   // ================= RELOAD LOGIC =================
   Future<void> _processReload() async {
     if (reloadAmount <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please enter a valid amount")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enter a valid amount"), backgroundColor: Colors.orange)
+      );
+      return;
+    }
+
+    if (selectedMethod == -1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please select a top-up method"), backgroundColor: Colors.orange)
+      );
       return;
     }
 
@@ -52,26 +64,28 @@ class _TopUpScreenState extends State<TopUpScreen> {
         barrierDismissible: false,
         builder: (_) => TngPopup(amount: reloadAmount),
       );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please select a payment method")));
-      return;
     }
 
     if (success == true) {
       // UPDATE FIREBASE BALANCE
       try {
-        await FirebaseFirestore.instance.collection('users').doc(user?.uid).update({
-          'balance': FieldValue.increment(reloadAmount),
-        });
+        final userRef = FirebaseFirestore.instance.collection('users').doc(user?.uid);
+        
+        await FirebaseFirestore.instance.runTransaction((transaction) async {
+          transaction.update(userRef, {
+            'balance': FieldValue.increment(reloadAmount),
+          });
 
-        // ADD TO TRANSACTION HISTORY
-        await FirebaseFirestore.instance.collection('users').doc(user?.uid).collection('transactions').add({
-          'title': 'Wallet Reload',
-          'amount': '+RM${reloadAmount.toStringAsFixed(2)}',
-          'date': DateTime.now().toIso8601String(),
+          // ADD TO TRANSACTION HISTORY
+          transaction.set(userRef.collection('transactions').doc(), {
+            'title': 'Wallet Reload',
+            'amount': '+RM${reloadAmount.toStringAsFixed(2)}',
+            'date': DateTime.now().toIso8601String(),
+          });
         });
 
         // SHOW SUCCESS POPUP
+        if (!mounted) return;
         showDialog(
           context: context,
           barrierDismissible: false,
@@ -82,12 +96,11 @@ class _TopUpScreenState extends State<TopUpScreen> {
           ),
         );
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Update Failed")));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Balance update failed")));
       }
     }
   }
 
-  // ================= SHARED UI COMPONENT =================
   Widget paymentCard({
     required int index,
     required String title,
@@ -145,7 +158,7 @@ class _TopUpScreenState extends State<TopUpScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // PURPLE HEADER (Matches Payment Screen)
+              // PURPLE HEADER
               Container(
                 padding: const EdgeInsets.fromLTRB(16, 20, 16, 30),
                 decoration: const BoxDecoration(
@@ -173,7 +186,8 @@ class _TopUpScreenState extends State<TopUpScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: TextField(
                   controller: _amountController,
-                  keyboardType: TextInputType.number,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}'))], // Forces numbers and max 2 decimals
                   style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFFA500FF)),
                   decoration: InputDecoration(
                     prefixText: "RM ",

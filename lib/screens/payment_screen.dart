@@ -20,20 +20,18 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
   String promoCode = '';
   double promoDiscountValue = 0.0;
-  String? appliedCode; // Tracks the code to "burn" it upon successful payment
+  String? appliedCode; 
   final double basePrice = 5.00;
 
   final List<String> banks = [
     'Maybank', 'CIMB Bank', 'Public Bank', 'RHB Bank', 'Hong Leong Bank',
   ];
 
-  // ================= PRICE LOGIC =================
   double get totalPrice {
     final total = basePrice - promoDiscountValue;
     return total < 0 ? 0 : total;
   }
 
-  // ================= LIVE BALANCE DISPLAY ON CARD =================
   Widget _walletBalanceDisplay() {
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance.collection('users').doc(user?.uid).snapshots(),
@@ -57,24 +55,21 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
-  // ================= SIMPLIFIED PROMO LOGIC =================
   Future<void> _applyPromo() async {
     if (promoCode.isEmpty) return;
     String code = promoCode.trim().toUpperCase();
 
     try {
-      // 1. Check if user already used this specific festive code
       var userDoc = await FirebaseFirestore.instance.collection('users').doc(user?.uid).get();
       List usedPromos = (userDoc.data() as Map<String, dynamic>?)?['usedPromos'] ?? [];
 
       if (usedPromos.contains(code)) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("You have already used this promo code!"), backgroundColor: Colors.orange),
+          const SnackBar(content: Text("Promo already used!"), backgroundColor: Colors.orange),
         );
         return;
       }
 
-      // 2. Check the global promocodes collection
       var promoDoc = await FirebaseFirestore.instance.collection('promocodes').doc(code).get();
 
       if (promoDoc.exists) {
@@ -89,12 +84,12 @@ class _PaymentScreenState extends State<PaymentScreen> {
           );
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("This promo code has expired"), backgroundColor: Colors.red),
+            const SnackBar(content: Text("Code Expired"), backgroundColor: Colors.red),
           );
         }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Invalid promo code"), backgroundColor: Colors.red),
+          const SnackBar(content: Text("Invalid Code"), backgroundColor: Colors.red),
         );
       }
     } catch (e) {
@@ -102,8 +97,12 @@ class _PaymentScreenState extends State<PaymentScreen> {
     }
   }
 
-  // ================= CENTRALIZED PAYMENT =================
   Future<void> processPayment() async {
+    if (selectedMethod == -1) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please select a payment method")));
+      return;
+    }
+
     bool? success;
 
     if (selectedMethod == 0) {
@@ -129,9 +128,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
         barrierDismissible: false,
         builder: (_) => TngPopup(amount: totalPrice),
       );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please select a payment method")));
-      return;
     }
 
     if (success == true) {
@@ -141,9 +137,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
         builder: (_) => SuccessPopup(
           amount: totalPrice,
           paymentMethod: _paymentMethodName(),
-          onOk: () {
-            Navigator.popUntil(context, (route) => route.isFirst);
-          },
+          onOk: () => Navigator.popUntil(context, (route) => route.isFirst),
         ),
       );
     }
@@ -158,13 +152,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     }
   }
 
-  Widget paymentCard({
-    required int index,
-    required String title,
-    required IconData icon,
-    required Color iconColor,
-    Widget? extra,
-  }) {
+  Widget paymentCard({required int index, required String title, required IconData icon, required Color iconColor, Widget? extra}) {
     final selected = selectedMethod == index;
     return GestureDetector(
       onTap: () {
@@ -183,13 +171,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: selected ? const Color(0xFFA500FF) : Colors.grey[200]!,
-            width: 2,
-          ),
-          boxShadow: [
-            if (selected) BoxShadow(color: const Color(0xFFA500FF).withOpacity(0.1), blurRadius: 8, offset: const Offset(0, 4)),
-          ],
+          border: Border.all(color: selected ? const Color(0xFFA500FF) : Colors.grey[200]!, width: 2),
+          boxShadow: [if (selected) BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
         ),
         child: Column(
           children: [
@@ -197,10 +180,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
               children: [
                 Container(
                   padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: iconColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  decoration: BoxDecoration(color: iconColor.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
                   child: Icon(icon, color: iconColor, size: 28),
                 ),
                 const SizedBox(width: 16),
@@ -240,126 +220,58 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 ),
                 child: Row(
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
-                      onPressed: () => Navigator.pop(context),
-                    ),
+                    IconButton(icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20), onPressed: () => Navigator.pop(context)),
                     const SizedBox(width: 8),
                     const Text("Checkout", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
                   ],
                 ),
               ),
-
-              const Padding(
-                padding: EdgeInsets.fromLTRB(24, 24, 24, 12),
-                child: Text("Select Payment Method", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87)),
-              ),
-
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Column(
-                  children: [
-                    paymentCard(index: 0, title: "WashSync Wallet", icon: Icons.account_balance_wallet_rounded, iconColor: const Color(0xFFA500FF)),
-                    paymentCard(
-                      index: 1, 
-                      title: "Online Banking", 
-                      icon: Icons.account_balance_rounded, 
-                      iconColor: Colors.blueAccent, 
-                      extra: selectedMethod == 1 
-                        ? Padding(
-                            padding: const EdgeInsets.only(top: 12), 
-                            child: DropdownButtonFormField<String>(
-                              decoration: InputDecoration(
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                              ),
-                              value: selectedBank, 
-                              hint: const Text("Choose Bank"), 
-                              items: banks.map((b) => DropdownMenuItem(value: b, child: Text(b))).toList(), 
-                              onChanged: (v) => setState(() => selectedBank = v),
-                            ),
-                          ) 
-                        : null
-                    ),
-                    paymentCard(index: 2, title: "TNG eWallet", icon: Icons.qr_code_scanner_rounded, iconColor: Colors.blue),
-                  ],
-                ),
-              ),
-
-              if (selectedMethod == 0) ...[
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(24, 20, 24, 8),
-                  child: Text("Promo Code", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          decoration: InputDecoration(
-                            hintText: "Enter code here",
-                            fillColor: Colors.grey[100],
-                            filled: true,
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                          ),
-                          onChanged: (v) => promoCode = v,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      ElevatedButton(
-                        onPressed: _applyPromo,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.black,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-                        ),
-                        child: const Text("Apply", style: TextStyle(color: Colors.white)),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-
               Padding(
                 padding: const EdgeInsets.all(24),
-                child: Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8F3FF),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: const Color(0xFFA500FF).withOpacity(0.1)),
-                  ),
-                  child: Column(
-                    children: [
-                      const Text("Order Summary", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      const SizedBox(height: 16),
-                      summaryRow("Base Price", basePrice),
-                      if (promoDiscountValue > 0) summaryRow("Discount", -promoDiscountValue, color: Colors.green),
-                      const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Divider()),
-                      summaryRow("Total Amount", totalPrice, bold: true),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text("Select Payment Method", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    const SizedBox(height: 16),
+                    paymentCard(index: 0, title: "WashSync Wallet", icon: Icons.account_balance_wallet_rounded, iconColor: const Color(0xFFA500FF)),
+                    paymentCard(
+                      index: 1, title: "Online Banking", icon: Icons.account_balance_rounded, iconColor: Colors.blueAccent,
+                      extra: selectedMethod == 1 ? DropdownButtonFormField<String>(
+                        value: selectedBank, hint: const Text("Choose Bank"),
+                        items: banks.map((b) => DropdownMenuItem(value: b, child: Text(b))).toList(),
+                        onChanged: (v) => setState(() => selectedBank = v),
+                      ) : null
+                    ),
+                    paymentCard(index: 2, title: "TNG eWallet", icon: Icons.qr_code_scanner_rounded, iconColor: Colors.blue),
+                    if (selectedMethod == 0) ...[
+                      const SizedBox(height: 10),
+                      Row(children: [
+                        Expanded(child: TextField(decoration: const InputDecoration(hintText: "Promo Code"), onChanged: (v) => promoCode = v)),
+                        const SizedBox(width: 10),
+                        ElevatedButton(onPressed: _applyPromo, child: const Text("Apply"))
+                      ]),
                     ],
-                  ),
-                ),
-              ),
-
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 40),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: processPayment,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFA500FF), 
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)), 
-                      padding: const EdgeInsets.symmetric(vertical: 18), 
-                      elevation: 0,
+                    const SizedBox(height: 30),
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(color: const Color(0xFFF8F3FF), borderRadius: BorderRadius.circular(20)),
+                      child: Column(children: [
+                        summaryRow("Base Price", basePrice),
+                        if (promoDiscountValue > 0) summaryRow("Discount", -promoDiscountValue, color: Colors.green),
+                        const Divider(),
+                        summaryRow("Total", totalPrice, bold: true),
+                      ]),
                     ),
-                    child: Text(
-                      "Pay RM ${totalPrice.toStringAsFixed(2)}",
-                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                    const SizedBox(height: 30),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: processPayment,
+                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFA500FF), padding: const EdgeInsets.symmetric(vertical: 18), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))),
+                        child: Text("Pay RM ${totalPrice.toStringAsFixed(2)}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ),
             ],
@@ -376,14 +288,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: TextStyle(fontSize: bold ? 18 : 14, fontWeight: bold ? FontWeight.bold : FontWeight.normal)),
-          Text(
-            "RM ${value.abs().toStringAsFixed(2)}",
-            style: TextStyle(
-              fontSize: bold ? 18 : 14,
-              fontWeight: bold ? FontWeight.bold : FontWeight.w600,
-              color: color ?? (bold ? const Color(0xFFA500FF) : Colors.black87),
-            ),
-          ),
+          Text("RM ${value.abs().toStringAsFixed(2)}", style: TextStyle(fontSize: bold ? 18 : 14, fontWeight: bold ? FontWeight.bold : FontWeight.w600, color: color ?? (bold ? const Color(0xFFA500FF) : Colors.black87))),
         ],
       ),
     );
