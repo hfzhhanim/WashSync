@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'sign_in_page.dart';
 import 'report_page.dart';           
 import 'feedback_rating_page.dart';   
+import 'history_page.dart';
 
 // YOUR Wallet & Payment Pages
 import 'wallet_page.dart';
@@ -58,7 +59,7 @@ class _HomePageState extends State<HomePage> {
       NavItem(
         icon: Icons.history,
         label: "History",
-        onTap: () => _navigateTo(const WalletPage(amountToDeduct: -1.0)),
+        onTap: () => _navigateTo(const HistoryPage()),
       ),
       NavItem(
         icon: Icons.report_outlined,

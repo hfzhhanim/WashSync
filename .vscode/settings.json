@@ -1,4 +1,5 @@
 {
     "emulator.emulatorPath": "",
-    "emulator.emulatorPathWindows": "C:\\Users\\user\\AppData\\Local\\Android\\Sdk\\emulator"
+    "emulator.emulatorPathWindows": "C:\\Users\\user\\AppData\\Local\\Android\\Sdk\\emulator",
+    "cmake.sourceDirectory": "C:/Users/HP/washSync_app/washsync_clean/linux"
 }

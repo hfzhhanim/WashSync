@@ -27,7 +27,7 @@ class HistoryPage extends StatelessWidget {
       "no": no,
       "time": DateTime.parse(time),
       "duration": duration,
-      "price": 4.50,
+      "price": 5.00,
       "status": "Completed",
     };
   }
