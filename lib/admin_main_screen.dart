@@ -4,6 +4,7 @@ import 'admin_dashboard_page.dart';
 import 'admin_reports_page.dart';
 import 'admin_maintenance_page.dart';
 import 'admin_analytics_page.dart';
+import 'screens/admin_promo_page.dart'; // Corrected import to match your root file location
 
 class AdminMainScreen extends StatefulWidget {
   const AdminMainScreen({super.key});
@@ -15,12 +16,14 @@ class AdminMainScreen extends StatefulWidget {
 class _AdminMainScreenState extends State<AdminMainScreen> {
   int _selectedIndex = 0;
 
-  // Define the list of content pages that will switch out
+  // Define the list of content pages including the Promo Management page
+  // The order here must match the index passed to _buildMenuItem
   static const List<Widget> _widgetOptions = <Widget>[
     AdminDashboardPage(),
     AdminReportsPage(),
     AdminMaintenancePage(),
     AdminAnalyticsPage(),
+    AdminPromoPage(), // Index 4
   ];
 
   @override
@@ -31,7 +34,7 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
         children: [
           // --- SIDEBAR ---
           Container(
-            width: 300, // Adjusted width to accommodate the new header
+            width: 300, 
             decoration: const BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
@@ -45,7 +48,6 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
             ),
             child: Column(
               children: [
-                // Updated Header: USM Laundry Admin
                 const Padding(
                   padding: EdgeInsets.only(top: 50, left: 25, bottom: 40),
                   child: Row(
@@ -66,20 +68,22 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
                   ),
                 ),
                 
-                // Sidebar Navigation Items with updated icons
+                // Sidebar Navigation Items
                 _buildMenuItem('Dashboard Overview', 0, Icons.grid_view_rounded),
                 _buildMenuItem('User Reports', 1, Icons.people_alt_outlined),
                 _buildMenuItem('Maintenance & Operations', 2, Icons.settings_outlined),
                 _buildMenuItem('Analytics & Report', 3, Icons.bar_chart_rounded),
+                _buildMenuItem('Promo Code Settings', 4, Icons.discount_outlined), 
                 
-                const Spacer(), // Pushes the profile section to the bottom
+                const Spacer(), 
                 
                 _buildProfileSection(),
               ],
             ),
           ),
 
-          // --- MAIN CONTENT AREA (Full Height) ---
+          // --- MAIN CONTENT AREA ---
+          // Using IndexedStack prevents the pages from "reloading" every time you click
           Expanded(
             child: IndexedStack(
               index: _selectedIndex,
@@ -136,7 +140,7 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 15),
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.15),
-          borderRadius: BorderRadius.circular(20), // Increased radius for smoother look
+          borderRadius: BorderRadius.circular(20), 
         ),
         child: const Row(
           children: [
