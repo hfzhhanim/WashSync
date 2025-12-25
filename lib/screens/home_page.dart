@@ -35,6 +35,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  int _selectedIndex = 0;
   User? get user => FirebaseAuth.instance.currentUser;
 
   void _navigateTo(Widget page) {
@@ -54,22 +55,34 @@ class _HomePageState extends State<HomePage> {
       NavItem(
         icon: Icons.person_outline,
         label: "Profile",
-        onTap: () => _navigateTo(const ProfilePage()),
+        onTap: () {
+          setState(() => _selectedIndex = 0);
+          _navigateTo(const ProfilePage());
+        },
       ),
       NavItem(
         icon: Icons.history,
         label: "History",
-        onTap: () => _navigateTo(const HistoryPage()),
+        onTap: () {
+          setState(() => _selectedIndex = 1);
+          _navigateTo(const HistoryPage());
+        },
       ),
       NavItem(
         icon: Icons.report_outlined,
         label: "Report",
-        onTap: () => _navigateTo(const ReportPage()),
+        onTap: () {
+          setState(() => _selectedIndex = 2);
+          _navigateTo(const ReportPage());
+        },
       ),
       NavItem(
         icon: Icons.feedback_outlined,
         label: "Feedback",
-        onTap: () => _navigateTo(const FeedbackRatingPage()),
+        onTap: () {
+          setState(() => _selectedIndex = 3);
+          _navigateTo(const FeedbackRatingPage());
+        },
       ),
     ];
 
@@ -130,22 +143,29 @@ class _HomePageState extends State<HomePage> {
   // --- TOP BAR (Original Style) ---
   Widget _topBar(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
+      //                ↑↑ more space at top
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
             children: [
-              Image.asset("assets/icons/logoWashSync.png", 
-                height: 30, 
-                errorBuilder: (context, error, stackTrace) => const Icon(Icons.local_laundry_service, color: Colors.white)),
-              const SizedBox(width: 8),
-              const Text("WashSync", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              Image.asset(
+                "assets/icons/logoWashSync.png",
+                height: 36, // slightly bigger = nicer balance
+                errorBuilder: (context, error, stackTrace) =>
+                    const Icon(Icons.local_laundry_service, color: Colors.white),
+              ),
+              const SizedBox(width: 10),
+              const Text(
+                "WashSync",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ],
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.white),
-            onPressed: () => FirebaseAuth.instance.signOut(),
           ),
         ],
       ),
@@ -171,9 +191,9 @@ class _HomePageState extends State<HomePage> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text("Hello 👋", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    const Text("Hello 👋", style: TextStyle(color: Colors.grey, fontSize: 13)),
                     Text(data['username'] ?? "User", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    Text(data['email'] ?? "", style: const TextStyle(color: Colors.purple, fontSize: 11)),
+                    Text(data['email'] ?? "", style: const TextStyle(color: Colors.purple, fontSize: 13)),
                   ],
                 ),
               ],
@@ -288,51 +308,70 @@ class _HomePageState extends State<HomePage> {
 
   // --- BOTTOM NAV (Original Style) ---
   Widget _bottomNav(List<NavItem> items) {
-    return SizedBox(
-      height: 80,
-      child: Stack(
-        alignment: Alignment.bottomCenter,
-        children: [
-          Container(
-            height: 60,
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(color: const Color(0xFFB48DD6), borderRadius: BorderRadius.circular(24)),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _navItemUI(items[0]),
-                _navItemUI(items[1]),
-                const SizedBox(width: 40),
-                _navItemUI(items[2]),
-                _navItemUI(items[3]),
-              ],
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFB48DD6),
+          borderRadius: BorderRadius.circular(28),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.15),
+              blurRadius: 10,
+              offset: const Offset(0, 6),
             ),
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: List.generate(
+            items.length,
+            (index) => _navItemUI(items[index], index),
           ),
-          Positioned(
-            top: 0, 
-            child: CircleAvatar(
-              radius: 32, 
-              backgroundColor: const Color(0xFF8A3FFC), 
-              child: IconButton(
-                icon: const Icon(Icons.home, color: Colors.white, size: 32), 
-                onPressed: () {}
-              )
-            )
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _navItemUI(NavItem item) {
+  Widget _navItemUI(NavItem item, int index) {
+    final bool isActive = _selectedIndex == index;
+
     return GestureDetector(
       onTap: item.onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min, 
-        children: [
-          Icon(item.icon, color: Colors.white, size: 22),
-          Text(item.label, style: const TextStyle(color: Colors.white, fontSize: 10)),
-        ]
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive
+              ? Colors.white.withOpacity(0.25)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedScale(
+              scale: isActive ? 1.2 : 1.0,
+              duration: const Duration(milliseconds: 250),
+              child: Icon(
+                item.icon,
+                color: isActive ? Colors.white : Colors.white70,
+                size: 24,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              item.label,
+              style: TextStyle(
+                color: isActive ? Colors.white : Colors.white70,
+                fontSize: 11,
+                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

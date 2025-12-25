@@ -1,6 +1,5 @@
 // lib/admin_main_screen.dart
 import 'package:flutter/material.dart';
-import 'package:washsync_app/screens/sign_in_page.dart';
 import 'admin_dashboard_page.dart';
 import 'admin_reports_page.dart';
 import 'admin_maintenance_page.dart';
