@@ -127,35 +127,45 @@ class _AdminMaintenancePageState extends State<AdminMaintenancePage> {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: Colors.grey.shade300),
       ),
+      child: SingleChildScrollView(
+  scrollDirection: Axis.horizontal,
       child: DataTable(
-        columns: const [
-          DataColumn(label: Text('Type', style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text('No.', style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text('Next Maintenance', style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text('Action', style: TextStyle(fontWeight: FontWeight.bold))),
-        ],
-        rows: _machines.asMap().entries.map((entry) {
-          int idx = entry.key;
-          var machine = entry.value;
-          bool isMaint = machine['status'] == 'Maintenance';
+          columns: const [
+            DataColumn(label: Text('Type', style: TextStyle(fontWeight: FontWeight.bold))),
+            DataColumn(label: Text('No.', style: TextStyle(fontWeight: FontWeight.bold))),
+            DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
+            DataColumn(label: Text('Next Maintenance', style: TextStyle(fontWeight: FontWeight.bold))),
+            DataColumn(label: Text('Action', style: TextStyle(fontWeight: FontWeight.bold))),
+          ],
+          rows: _machines.asMap().entries.map((entry) {
+            int idx = entry.key;
+            var machine = entry.value;
+            bool isMaint = machine['status'] == 'Maintenance';
 
-          return DataRow(cells: [
-            DataCell(Text(machine['type'])),
-            DataCell(Text(machine['no'].toString())),
-            DataCell(_buildStatusBadge(machine['status'])),
-            DataCell(Text(machine['next'])), 
-            DataCell(
-              ElevatedButton(
-                onPressed: () => _handleAction(idx),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: isMaint ? Colors.orange[800] : Colors.blue[700],
+            return DataRow(cells: [
+              DataCell(Text(machine['type'])),
+              DataCell(Text(machine['no'].toString())),
+              DataCell(_buildStatusBadge(machine['status'])),
+              DataCell(Text(machine['next'])),
+              DataCell(
+                SizedBox(
+                  width: 120, // 👈 IMPORTANT
+                  child: ElevatedButton(
+                    onPressed: () => _handleAction(idx),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isMaint ? Colors.orange[800] : Colors.blue[700],
+                      foregroundColor: Colors.white,
+                    ),
+                    child: Text(
+                      isMaint ? 'Update' : 'Schedule',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ),
-                child: Text(isMaint ? 'Update' : 'Schedule', style: const TextStyle(color: Colors.white)),
               ),
-            ),
-          ]);
-        }).toList(),
+            ]);
+          }).toList(),
+        ),
       ),
     );
   }

@@ -148,12 +148,50 @@ class _SignUpStep3PasswordState extends State<SignUpStep3Password> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       /// HEADER
-                      const Text(
-                        "Create a password",
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          // LEFT SIDE TEXTS
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: const [
+                                Text(
+                                  "Create a password",
+                                  style: TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black,
+                                  ),
+                                ),
+                                SizedBox(height: 6),
+                                Text(
+                                  "Create a strong password",
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Color(0xFFA500FF), // purple subtitle
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // RIGHT SIDE LOCK ICON
+                          Container(
+                            width: 48,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF3E8FF), // light purple background
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: const Icon(
+                              Icons.lock_outline,
+                              color: Color(0xFFA500FF),
+                              size: 26,
+                            ),
+                          ),
+                        ],
                       ),
 
                       const SizedBox(height: 20),
@@ -243,31 +281,80 @@ class _SignUpStep3PasswordState extends State<SignUpStep3Password> {
 
                       const SizedBox(height: 20),
 
-                      /// CREATE BUTTON
-                      SizedBox(
-                        width: double.infinity,
-                        height: 50,
-                        child: ElevatedButton(
-                          onPressed: isLoading ? null : createAccount,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFA500FF),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
+                      /// BUTTON
+                      Row(
+                        children: [
+                          // 🔙 BACK BUTTON
+                          Expanded(
+                            child: SizedBox(
+                              height: 55,
+                              child: ElevatedButton.icon(
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                },
+                                icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 18),
+                                label: const Text(
+                                  "Back",
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFA500FF),
+                                  elevation: 6,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
-                          child: isLoading
-                              ? const CircularProgressIndicator(
-                                  color: Colors.white)
-                              : const Text(
+
+                          const SizedBox(width: 14),
+
+                          // ✅ CREATE ACCOUNT BUTTON
+                          Expanded(
+                            child: SizedBox(
+                              height: 55,
+                              child: ElevatedButton.icon(
+                                onPressed: isLoading ? null : createAccount,
+                                icon: isLoading
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : const Icon(Icons.check, color: Colors.white),
+                                label: const Text(
                                   "Create Account",
                                   style: TextStyle(
-                                      color: Colors.white, fontSize: 16),
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
-                        ),
-                      ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFA500FF),
+                                  elevation: 6,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      )
                     ],
                   ),
                 ),
+
+                const SizedBox(height: 20),
 
                 /// SIGN IN
                 Row(

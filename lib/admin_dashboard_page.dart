@@ -1,7 +1,52 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
-class AdminDashboardPage extends StatelessWidget {
+class AdminDashboardPage extends StatefulWidget {
   const AdminDashboardPage({super.key});
+
+  @override
+  State<AdminDashboardPage> createState() => _AdminDashboardPageState();
+}
+
+class _AdminDashboardPageState extends State<AdminDashboardPage> {
+  String adminName = "Admin";
+  bool isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    fetchAdminName();
+  }
+
+  Future<void> fetchAdminName() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+
+      if (user == null) {
+        setState(() => isLoading = false);
+        return;
+      }
+
+      final doc = await FirebaseFirestore.instance
+          .collection('admins')
+          .doc(user.uid)
+          .get();
+
+      if (doc.exists) {
+        setState(() {
+          adminName = doc.data()?['username'] ?? "Admin";
+          isLoading = false;
+        });
+      } else {
+        // Admin doc not found
+        setState(() => isLoading = false);
+      }
+    } catch (e) {
+      debugPrint("Error fetching admin name: $e");
+      setState(() => isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -13,24 +58,26 @@ class AdminDashboardPage extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Welcome, Admin 1 !',
-                style: TextStyle(
+              /// 🔥 WELCOME TEXT
+              Text(
+                isLoading ? 'Welcome...' : 'Welcome, $adminName!',
+                style: const TextStyle(
                   fontSize: 27,
                   fontWeight: FontWeight.bold,
                   color: Colors.black,
                 ),
               ),
+
               const SizedBox(height: 30),
 
-              // 1. FOUR BOXES SECTION
+              /// 🔢 SUMMARY CARDS
               GridView.count(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 4, // Set to 4 columns
+                crossAxisCount: 4,
                 crossAxisSpacing: 20,
                 mainAxisSpacing: 20,
-                childAspectRatio: 1.3, // Adjusted to be slightly wider than tall
+                childAspectRatio: 1.3,
                 children: [
                   _buildSquare('Total Machines', '10'),
                   _buildSquare('Available', '4'),
@@ -41,17 +88,17 @@ class AdminDashboardPage extends StatelessWidget {
 
               const SizedBox(height: 40),
 
-              // 2. SYSTEM STATUS SUMMARY TABLE
+              /// 📊 SYSTEM STATUS
               const Text(
                 'System Status Summary',
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black,
                 ),
               ),
+
               const SizedBox(height: 20),
-              
+
               _buildStatusTable(),
             ],
           ),
@@ -60,7 +107,7 @@ class AdminDashboardPage extends StatelessWidget {
     );
   }
 
-  // Widget for the Summary Table
+  /// 📋 TABLE
   Widget _buildStatusTable() {
     return Container(
       width: double.infinity,
@@ -70,9 +117,8 @@ class AdminDashboardPage extends StatelessWidget {
         boxShadow: [
           BoxShadow(
             color: Colors.grey.withOpacity(0.1),
-            spreadRadius: 2,
             blurRadius: 10,
-          )
+          ),
         ],
       ),
       child: DataTable(
@@ -84,24 +130,29 @@ class AdminDashboardPage extends StatelessWidget {
           DataColumn(label: Text('Last Update', style: TextStyle(fontWeight: FontWeight.bold))),
         ],
         rows: List.generate(5, (index) {
-          return DataRow(cells: [
-            DataCell(Text(index % 2 == 0 ? 'Washer' : 'Dryer')),
-            DataCell(Text('${index + 1}')),
-            DataCell(_buildStatusBadge(index)),
-            const DataCell(Text('10:45 AM')),
-          ]);
+          return DataRow(
+            cells: [
+              DataCell(Text(index.isEven ? 'Washer' : 'Dryer')),
+              DataCell(Text('${index + 1}')),
+              DataCell(_buildStatusBadge(index)),
+              const DataCell(Text('10:45 AM')),
+            ],
+          );
         }),
       ),
     );
   }
 
-  // Helper for Status Badge in Table
+  /// 🟢 STATUS BADGE
   Widget _buildStatusBadge(int index) {
     List<String> statuses = ['Available', 'In Use', 'Maintenance'];
     String status = statuses[index % 3];
-    Color color = status == 'Available' 
-        ? Colors.green 
-        : (status == 'In Use' ? Colors.blue : Colors.orange);
+
+    Color color = status == 'Available'
+        ? Colors.green
+        : status == 'In Use'
+            ? Colors.blue
+            : Colors.orange;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -111,12 +162,16 @@ class AdminDashboardPage extends StatelessWidget {
       ),
       child: Text(
         status,
-        style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12),
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.bold,
+          fontSize: 12,
+        ),
       ),
     );
   }
 
-  // Your existing Square Widget (slightly optimized for 4 columns)
+  /// 🟣 SUMMARY CARD
   Widget _buildSquare(String title, String value) {
     return Container(
       decoration: BoxDecoration(
@@ -133,12 +188,20 @@ class AdminDashboardPage extends StatelessWidget {
           Text(
             title,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
           ),
           const SizedBox(height: 10),
           Text(
             value,
-            style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 32,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ],
       ),

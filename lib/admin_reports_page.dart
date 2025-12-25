@@ -115,58 +115,73 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
             return status.toLowerCase() == _selectedFilter.toLowerCase();
           }).toList();
 
-          return DataTable(
-            headingRowHeight: 60,
-            dataRowMaxHeight: 70,
-            showCheckboxColumn: false,
-            columns: const [
-              DataColumn(label: Text('Report ID', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('Type', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('No.', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('Issue Type', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('Action', style: TextStyle(fontWeight: FontWeight.bold))),
-            ],
-            rows: docs.map((doc) {
-              var data = doc.data() as Map<String, dynamic>;
-              String status = data['status'] ?? 'Pending';
-              bool isResolved = status.toLowerCase() == 'resolved';
+          return SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              headingRowHeight: 60,
+              dataRowMaxHeight: 70,
+              showCheckboxColumn: false,
+              columns: const [
+                DataColumn(label: Text('Report ID', style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text('Type', style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text('No.', style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text('Issue Type', style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text('Action', style: TextStyle(fontWeight: FontWeight.bold))),
+              ],
+              rows: docs.map((doc) {
+                var data = doc.data() as Map<String, dynamic>;
+                String status = data['status'] ?? 'Pending';
+                bool isResolved = status.toLowerCase() == 'resolved';
 
-              return DataRow(
-                onSelectChanged: (_) {
-                  setState(() {
-                    _selectedReportData = data;
-                    _selectedReportId = doc.id;
-                  });
-                },
-                cells: [
-                  DataCell(Text('#${doc.id.substring(0, 5)}')),
-                  DataCell(Text(data['machineType'] ?? data['category'] ?? 'Washer')),
-                  DataCell(Text(_getMachineNumber(data['machineNumber']))),
-                  DataCell(SizedBox(width: 150, child: Text(data['issueType'] ?? 'Other', overflow: TextOverflow.ellipsis))),
-                  DataCell(_buildStatusBadge(status)),
-                  DataCell(
-                    isResolved 
-                    ? TextButton.icon(
-                        icon: const Icon(Icons.visibility, size: 18, color: Colors.blue),
-                        label: const Text('View', style: TextStyle(color: Colors.blue)),
-                        onPressed: () => setState(() {
-                          _selectedReportData = data;
-                          _selectedReportId = doc.id;
-                        }),
-                      )
-                    : TextButton.icon(
-                        icon: const Icon(Icons.build_circle_outlined, size: 18, color: Colors.orange),
-                        label: const Text('Resolve', style: TextStyle(color: Colors.orange)),
-                        onPressed: () => setState(() {
-                          _selectedReportData = data;
-                          _selectedReportId = doc.id;
-                        }),
+                return DataRow(
+                  onSelectChanged: (_) {
+                    setState(() {
+                      _selectedReportData = data;
+                      _selectedReportId = doc.id;
+                    });
+                  },
+                  cells: [
+                    DataCell(Text('#${doc.id.substring(0, 5)}')),
+                    DataCell(Text(data['machineType'] ?? data['category'] ?? 'Washer')),
+                    DataCell(Text(_getMachineNumber(data['machineNumber']))),
+                    DataCell(
+                      SizedBox(
+                        width: 150,
+                        child: Text(
+                          data['issueType'] ?? 'Other',
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                  ),
-                ],
-              );
-            }).toList(),
+                    ),
+                    DataCell(_buildStatusBadge(status)),
+                    DataCell(
+                      isResolved
+                          ? TextButton.icon(
+                              icon: const Icon(Icons.visibility, size: 18),
+                              label: const Text('View'),
+                              onPressed: () {
+                                setState(() {
+                                  _selectedReportData = data;
+                                  _selectedReportId = doc.id;
+                                });
+                              },
+                            )
+                          : TextButton.icon(
+                              icon: const Icon(Icons.build_circle_outlined, size: 18),
+                              label: const Text('Resolve'),
+                              onPressed: () {
+                                setState(() {
+                                  _selectedReportData = data;
+                                  _selectedReportId = doc.id;
+                                });
+                              },
+                            ),
+                    ),
+                  ],
+                );
+              }).toList(),
+            ),
           );
         },
       ),

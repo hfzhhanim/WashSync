@@ -1,10 +1,14 @@
 // lib/admin_main_screen.dart
 import 'package:flutter/material.dart';
+import 'package:washsync_app/screens/sign_in_page.dart';
 import 'admin_dashboard_page.dart';
 import 'admin_reports_page.dart';
 import 'admin_maintenance_page.dart';
 import 'admin_analytics_page.dart';
-import 'screens/admin_promo_page.dart'; // Corrected import to match your root file location
+import 'screens/admin_promo_page.dart';
+import 'admin_sign_in_page.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AdminMainScreen extends StatefulWidget {
   const AdminMainScreen({super.key});
@@ -134,36 +138,99 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
   }
 
   Widget _buildProfileSection() {
-    return Padding(
-      padding: const EdgeInsets.all(25.0),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 15),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.15),
-          borderRadius: BorderRadius.circular(20), 
-        ),
-        child: const Row(
-          children: [
-            CircleAvatar(
-              radius: 18, 
-              backgroundColor: Colors.white, 
-              child: Icon(Icons.person, color: Colors.purple, size: 20)
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      return const SizedBox();
+    }
+
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance
+          .collection('admins')
+          .doc(user.uid)
+          .get(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Padding(
+            padding: EdgeInsets.all(25),
+            child: CircularProgressIndicator(color: Colors.white),
+          );
+        }
+
+        final data = snapshot.data!.data() as Map<String, dynamic>?;
+
+        final username = data?['username'] ?? 'Admin';
+        final email = data?['email'] ?? user.email ?? '';
+
+        return Padding(
+          padding: const EdgeInsets.all(25.0),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 15),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(20),
             ),
-            SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'admin1@gmail.com',
-                style: TextStyle(
-                  color: Colors.white, 
-                  fontSize: 13, 
-                  fontWeight: FontWeight.bold
+            child: Row(
+              children: [
+                // 👤 Avatar
+                const CircleAvatar(
+                  radius: 18,
+                  backgroundColor: Colors.white,
+                  child: Icon(Icons.person, color: Colors.purple, size: 20),
                 ),
-                overflow: TextOverflow.ellipsis,
-              ),
+
+                const SizedBox(width: 12),
+
+                // 🧾 Username + Email
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        username,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        email,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 11,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+
+                // 🚪 LOGOUT BUTTON (RIGHT SIDE)
+                IconButton(
+                  icon: const Icon(
+                    Icons.logout,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                  tooltip: 'Logout',
+                  onPressed: () async {
+                    await FirebaseAuth.instance.signOut();
+
+                    if (!context.mounted) return;
+
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(builder: (_) => const AdminSignInPage()),
+                      (route) => false,
+                    );
+                  },
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }
