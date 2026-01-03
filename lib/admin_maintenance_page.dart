@@ -181,7 +181,11 @@ class _AdminMaintenancePageState extends State<AdminMaintenancePage> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(15),
         border: Border.all(color: isUpdate ? Colors.orange : Colors.blue, width: 2),
+<<<<<<< HEAD
         boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
+=======
+        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)],
+>>>>>>> 3388b30be0a1c74806ad5c57fb8aa22408713e17
       ),
       child: Form(
         key: _formKey,
@@ -193,7 +197,11 @@ class _AdminMaintenancePageState extends State<AdminMaintenancePage> {
             const Divider(height: 40),
             const Text('Issue Type', style: TextStyle(fontWeight: FontWeight.bold)),
             DropdownButtonFormField<String>(
+<<<<<<< HEAD
               initialValue: _selectedIssue,
+=======
+              value: _selectedIssue,
+>>>>>>> 3388b30be0a1c74806ad5c57fb8aa22408713e17
               items: _issueTypes.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
               onChanged: (val) => setState(() => _selectedIssue = val),
               decoration: const InputDecoration(border: OutlineInputBorder(), filled: true, fillColor: Colors.white),

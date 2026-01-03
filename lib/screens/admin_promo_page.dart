@@ -172,7 +172,11 @@ class _AdminPromoPageState extends State<AdminPromoPage> {
                               // Toggle Active/Inactive
                               Switch(
                                 value: active,
+<<<<<<< HEAD
                                 activeThumbColor: Colors.purple,
+=======
+                                activeColor: Colors.purple,
+>>>>>>> 3388b30be0a1c74806ad5c57fb8aa22408713e17
                                 onChanged: (val) {
                                   FirebaseFirestore.instance.collection('promocodes').doc(id).update({'isActive': val});
                                 },

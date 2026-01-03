@@ -19,7 +19,11 @@ Future<void> updateReportStatus(String reportId, String newStatus) async {
         .update({'status': newStatus});
   } catch (e) {
     print("Error updating report: $e");
+<<<<<<< HEAD
     rethrow;
+=======
+    throw e;
+>>>>>>> 3388b30be0a1c74806ad5c57fb8aa22408713e17
   }
 }
 

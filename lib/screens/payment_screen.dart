@@ -61,7 +61,11 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
     try {
       var userDoc = await FirebaseFirestore.instance.collection('users').doc(user?.uid).get();
+<<<<<<< HEAD
       List usedPromos = (userDoc.data())?['usedPromos'] ?? [];
+=======
+      List usedPromos = (userDoc.data() as Map<String, dynamic>?)?['usedPromos'] ?? [];
+>>>>>>> 3388b30be0a1c74806ad5c57fb8aa22408713e17
 
       if (usedPromos.contains(code)) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -237,7 +241,11 @@ class _PaymentScreenState extends State<PaymentScreen> {
                     paymentCard(
                       index: 1, title: "Online Banking", icon: Icons.account_balance_rounded, iconColor: Colors.blueAccent,
                       extra: selectedMethod == 1 ? DropdownButtonFormField<String>(
+<<<<<<< HEAD
                         initialValue: selectedBank, hint: const Text("Choose Bank"),
+=======
+                        value: selectedBank, hint: const Text("Choose Bank"),
+>>>>>>> 3388b30be0a1c74806ad5c57fb8aa22408713e17
                         items: banks.map((b) => DropdownMenuItem(value: b, child: Text(b))).toList(),
                         onChanged: (v) => setState(() => selectedBank = v),
                       ) : null

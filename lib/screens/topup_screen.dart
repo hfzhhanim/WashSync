@@ -223,7 +223,11 @@ class _TopUpScreenState extends State<TopUpScreen> {
                                   contentPadding: const EdgeInsets.symmetric(horizontal: 12),
                                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                                 ),
+<<<<<<< HEAD
                                 initialValue: selectedBank,
+=======
+                                value: selectedBank,
+>>>>>>> 3388b30be0a1c74806ad5c57fb8aa22408713e17
                                 hint: const Text("Choose Bank"),
                                 items: banks.map((b) => DropdownMenuItem(value: b, child: Text(b))).toList(),
                                 onChanged: (v) => setState(() => selectedBank = v),

@@ -156,11 +156,19 @@ class _SignUpStep2EmailState extends State<SignUpStep2Email> {
                           border: Border.all(color: Colors.purple),
                           borderRadius: BorderRadius.circular(10),
                         ),
+<<<<<<< HEAD
                         child: const Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
                               children: [
+=======
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: const [
+>>>>>>> 3388b30be0a1c74806ad5c57fb8aa22408713e17
                                  Icon(Icons.shield_outlined, color: Colors.purple),
                                  SizedBox(width: 8),
                                 Text(
@@ -174,10 +182,17 @@ class _SignUpStep2EmailState extends State<SignUpStep2Email> {
                             ),
 
 
+<<<<<<< HEAD
                             SizedBox(height: 6),
 
 
                             Text(
+=======
+                            const SizedBox(height: 6),
+
+
+                            const Text(
+>>>>>>> 3388b30be0a1c74806ad5c57fb8aa22408713e17
                               "We’ll never share your email. It's only used for account access and important updates.",
                               style: TextStyle(fontSize: 13),
                             ),

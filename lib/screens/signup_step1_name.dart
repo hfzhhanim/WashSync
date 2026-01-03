@@ -150,11 +150,19 @@ class _SignUpStep1NameState extends State<SignUpStep1Name> {
                           border: Border.all(color: Colors.purple),
                           borderRadius: BorderRadius.circular(10),
                         ),
+<<<<<<< HEAD
                         child: const Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
                               children: [
+=======
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: const [
+>>>>>>> 3388b30be0a1c74806ad5c57fb8aa22408713e17
                                 Icon(
                                   Icons.help_outline,
                                   color: Colors.purple,
@@ -172,10 +180,17 @@ class _SignUpStep1NameState extends State<SignUpStep1Name> {
                             ),
 
 
+<<<<<<< HEAD
                             SizedBox(height: 6),
 
 
                             Text(
+=======
+                            const SizedBox(height: 6),
+
+
+                            const Text(
+>>>>>>> 3388b30be0a1c74806ad5c57fb8aa22408713e17
                               "We’ll use your name to personalize your laundry service experience.",
                               style: TextStyle(fontSize: 13),
                             ),
@@ -215,9 +230,15 @@ class _SignUpStep1NameState extends State<SignUpStep1Name> {
                               ),
                             );
                           },
+<<<<<<< HEAD
                           child: const Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
+=======
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: const [
+>>>>>>> 3388b30be0a1c74806ad5c57fb8aa22408713e17
                               Text(
                                 "Next",
                                 style: TextStyle(

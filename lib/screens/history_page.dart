@@ -94,8 +94,13 @@ class HistoryPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+<<<<<<< HEAD
             const Row(
               children: [
+=======
+            Row(
+              children: const [
+>>>>>>> 3388b30be0a1c74806ad5c57fb8aa22408713e17
                 Icon(Icons.update, color: Colors.purple),
                 SizedBox(width: 8),
                 Text(
@@ -211,8 +216,13 @@ class HistoryPage extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: isWasher
+<<<<<<< HEAD
               ? [const Color(0xFF9B59B6), const Color(0xFFB97AD9)]
               : [const Color(0xFFB97AD9), const Color(0xFFD8B4F8)],
+=======
+              ? [Color(0xFF9B59B6), Color(0xFFB97AD9)]
+              : [Color(0xFFB97AD9), Color(0xFFD8B4F8)],
+>>>>>>> 3388b30be0a1c74806ad5c57fb8aa22408713e17
         ),
         borderRadius: BorderRadius.circular(14),
       ),

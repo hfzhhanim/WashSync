@@ -153,19 +153,34 @@ class _AdminSignUpStep2EmailState extends State<AdminSignUpStep2Email> {
                               border: Border.all(color: Colors.purple),
                               borderRadius: BorderRadius.circular(14),
                             ),
+<<<<<<< HEAD
                             child: const Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Icon(
+=======
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(
+>>>>>>> 3388b30be0a1c74806ad5c57fb8aa22408713e17
                                   Icons.shield_outlined,
                                   color: Colors.purple,
                                   size: 26,
                                 ),
+<<<<<<< HEAD
                                 SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
+=======
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: const [
+>>>>>>> 3388b30be0a1c74806ad5c57fb8aa22408713e17
                                       Text(
                                         "Your privacy matters",
                                         style: TextStyle(
