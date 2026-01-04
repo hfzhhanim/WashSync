@@ -152,17 +152,10 @@ class _SignUpStep3PasswordState extends State<SignUpStep3Password> {
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           // LEFT SIDE TEXTS
-<<<<<<< HEAD
                           const Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-=======
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: const [
->>>>>>> 3388b30be0a1c74806ad5c57fb8aa22408713e17
                                 Text(
                                   "Create a password",
                                   style: TextStyle(
@@ -436,15 +429,9 @@ class _SuccessDialog extends StatelessWidget {
           color: Colors.white,
           borderRadius: BorderRadius.circular(20),
         ),
-<<<<<<< HEAD
         child: const Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-=======
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: const [
->>>>>>> 3388b30be0a1c74806ad5c57fb8aa22408713e17
             Icon(
               Icons.check_circle,
               color: Colors.purple,

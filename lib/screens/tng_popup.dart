@@ -172,16 +172,8 @@ class _TngPopupState extends State<TngPopup> {
               leftOnTap: () => Navigator.pop(context), 
               rightText: _isExpired ? "RESEND" : "CONFIRM", 
               rightOnTap: _isExpired ? _verifyPhone : () {
-<<<<<<< HEAD
-                if (_pinController.text == _validPin) {
-                  Navigator.pop(context, true);
-                } else {
-                  _showSnackBar("Incorrect PIN");
-                }
-=======
                 if (_pinController.text == _validPin) Navigator.pop(context, true);
                 else _showSnackBar("Incorrect PIN");
->>>>>>> 3388b30be0a1c74806ad5c57fb8aa22408713e17
               }, 
               rightColor: _isExpired ? Colors.orange : Colors.blue
             ),

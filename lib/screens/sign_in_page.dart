@@ -69,6 +69,66 @@ class _SignInPageState extends State<SignInPage> {
     }
   }
 
+  Future<void> _showForgotPasswordDialog() async {
+    if (emailController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please enter your email first"),
+        ),
+      );
+      return;
+    }
+
+    try {
+      await _auth.sendPasswordResetEmail(
+        email: emailController.text.trim(),
+      );
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Password reset link sent to your email"),
+        ),
+      );
+    } on FirebaseAuthException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.message ?? "Failed to send reset email"),
+        ),
+      );
+    }
+  }
+
+  void _handleForgotPassword() async {
+    final email = emailController.text.trim();
+
+    // 1️⃣ CHECK EMPTY EMAIL
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please enter your email first"),
+        ),
+      );
+      return;
+    }
+
+    try {
+      // 2️⃣ SEND RESET EMAIL
+      await _auth.sendPasswordResetEmail(email: email);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Password reset email sent! Check your inbox."),
+        ),
+      );
+    } on FirebaseAuthException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.message ?? "Something went wrong"),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -158,6 +218,22 @@ class _SignInPageState extends State<SignInPage> {
                         hint: "••••••••",
                         obscure: true,
                         isPassword: true,
+                      ),
+
+                      const SizedBox(height: 6),
+
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: GestureDetector(
+                          onTap: _handleForgotPassword,
+                          child: const Text(
+                            "**Forgot Password**",
+                            style: TextStyle(
+                              color: Colors.purpleAccent,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
                       ),
 
                       if (errorText.isNotEmpty) ...[

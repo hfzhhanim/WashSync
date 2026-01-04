@@ -165,11 +165,7 @@ class ReportPageState extends State<ReportPage> {
                 Text("Category", style: _headerStyle),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<MachineCategory>(
-<<<<<<< HEAD
                   initialValue: _selectedCategory,
-=======
-                  value: _selectedCategory,
->>>>>>> 3388b30be0a1c74806ad5c57fb8aa22408713e17
                   decoration: _inputDecoration("Select machine type"),
                   items: MachineCategory.values.map((category) {
                     return DropdownMenuItem(
@@ -184,11 +180,7 @@ class ReportPageState extends State<ReportPage> {
                 Text("Machine Number", style: _headerStyle),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<int>(
-<<<<<<< HEAD
                   initialValue: _selectedMachineNumber,
-=======
-                  value: _selectedMachineNumber,
->>>>>>> 3388b30be0a1c74806ad5c57fb8aa22408713e17
                   decoration: _inputDecoration("Select the machine number"),
                   items: _machineNumbers.map((number) {
                     return DropdownMenuItem(
@@ -203,11 +195,7 @@ class ReportPageState extends State<ReportPage> {
                 Text("Issue", style: _headerStyle),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<IssueType>(
-<<<<<<< HEAD
                   initialValue: _selectedIssue,
-=======
-                  value: _selectedIssue,
->>>>>>> 3388b30be0a1c74806ad5c57fb8aa22408713e17
                   decoration: _inputDecoration("Select the primary issue"),
                   items: IssueType.values.map((issue) {
                     return DropdownMenuItem(

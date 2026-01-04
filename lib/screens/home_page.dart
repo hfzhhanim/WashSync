@@ -3,20 +3,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 // Team's Pages
-<<<<<<< HEAD
-=======
 import 'sign_in_page.dart';
->>>>>>> 3388b30be0a1c74806ad5c57fb8aa22408713e17
 import 'report_page.dart';           
 import 'feedback_rating_page.dart';   
 import 'history_page.dart';
 
 // YOUR Wallet & Payment Pages
 import 'wallet_page.dart';
-<<<<<<< HEAD
-=======
 import 'payment_screen.dart';
->>>>>>> 3388b30be0a1c74806ad5c57fb8aa22408713e17
 import 'washer_page.dart';
 import 'dryer_page.dart';
 import 'profile_page.dart';

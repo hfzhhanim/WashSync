@@ -1,9 +1,6 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -18,32 +15,9 @@ class _ProfilePageState extends State<ProfilePage> {
   final picker = ImagePicker();
 
   bool _isEditingName = false;
-  File? _image;
 
   final TextEditingController _usernameController = TextEditingController();
 
-  // 📸 PICK & UPLOAD IMAGE
-  Future<void> _pickAndUploadImage() async {
-    final picked = await picker.pickImage(source: ImageSource.gallery);
-    if (picked == null) return;
-
-    setState(() {
-      _image = File(picked.path);
-    });
-
-    final ref = FirebaseStorage.instance
-        .ref()
-        .child('profile_pictures')
-        .child('${user!.uid}.jpg');
-
-    await ref.putFile(_image!);
-    final url = await ref.getDownloadURL();
-
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user!.uid)
-        .update({'photoUrl': url});
-  }
 
   // ✏️ SAVE USERNAME
   Future<void> _saveUsername() async {
@@ -139,15 +113,12 @@ class _ProfilePageState extends State<ProfilePage> {
                         bottom: 0,
                         right: 0,
                         child: GestureDetector(
-                          onTap: _pickAndUploadImage,
                           child: Container(
                             padding: const EdgeInsets.all(6),
-                            decoration: const BoxDecoration(
+                            /*decoration: const BoxDecoration(
                               shape: BoxShape.circle,
                               color: Colors.white,
-                            ),
-                            child: const Icon(Icons.edit,
-                                size: 18, color: Colors.purple),
+                            )*/
                           ),
                         ),
                       ),

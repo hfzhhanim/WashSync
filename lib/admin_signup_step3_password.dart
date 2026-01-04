@@ -154,17 +154,10 @@ class _AdminSignUpStep3PasswordState
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               /// LEFT TEXT
-<<<<<<< HEAD
                               const Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-=======
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: const [
->>>>>>> 3388b30be0a1c74806ad5c57fb8aa22408713e17
                                     Text(
                                       "Create an account",
                                       style: TextStyle(
@@ -188,11 +181,7 @@ class _AdminSignUpStep3PasswordState
                               Container(
                                 padding: const EdgeInsets.all(10),
                                 decoration: BoxDecoration(
-<<<<<<< HEAD
                                   color: const Color(0xFFE9D5FF),
-=======
-                                  color: Color(0xFFE9D5FF),
->>>>>>> 3388b30be0a1c74806ad5c57fb8aa22408713e17
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: const Icon(
@@ -426,15 +415,9 @@ class _SuccessDialog extends StatelessWidget {
           color: Colors.white,
           borderRadius: BorderRadius.circular(20),
         ),
-<<<<<<< HEAD
         child: const Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-=======
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: const [
->>>>>>> 3388b30be0a1c74806ad5c57fb8aa22408713e17
             Icon(Icons.check_circle, color: Colors.purple, size: 64),
             SizedBox(height: 12),
             Text(
