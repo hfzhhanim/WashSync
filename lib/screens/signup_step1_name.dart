@@ -20,9 +20,10 @@ class _SignUpStep1NameState extends State<SignUpStep1Name> {
         child: Container(
           width: double.infinity,
           decoration: const BoxDecoration(
-            image: DecorationImage(
-              image: AssetImage("assets/images/backgroundColour.png"),
-              fit: BoxFit.cover,
+            gradient: LinearGradient(
+              colors: [Color(0xFFB388FF), Color(0xFFE1BEE7)],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
             ),
           ),
           child: SingleChildScrollView(

@@ -32,7 +32,6 @@ class _AdminSignInPageState extends State<AdminSignInPage> {
 
       final user = cred.user!;
       
-      // ✅ Admin check
       if (!user.email!.endsWith('@admin.my')) {
         await FirebaseAuth.instance.signOut();
         setState(() => error = "Not an admin account");

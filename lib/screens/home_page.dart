@@ -27,6 +27,24 @@ class NavItem {
   });
 }
 
+Future<void> bookMachine(String docId) async {
+  final ref = FirebaseFirestore.instance.collection('machines').doc(docId);
+
+  await FirebaseFirestore.instance.runTransaction((transaction) async {
+    final snapshot = await transaction.get(ref);
+
+    if (!snapshot.exists) return;
+
+    int available = snapshot['available'];
+
+    if (available > 0) {
+      transaction.update(ref, {
+        'available': available - 1,
+      });
+    }
+  });
+}
+
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -89,8 +107,8 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFFD8B4F8), Color(0xFFC084FC)],
+          gradient: const LinearGradient(
+            colors: [Color(0xFFB388FF), Color(0xFFE1BEE7)],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
@@ -100,7 +118,10 @@ class _HomePageState extends State<HomePage> {
             children: [
               _topBar(context),
               const SizedBox(height: 16),
-              _userCard(user!), // Original welcome user layout
+              Transform.translate(
+                offset: const Offset(0, -6),
+                child: _userCard(user!),
+              ), // Original welcome user layout
               const SizedBox(height: 16),
               _stats(user!), // 2 Equal sized boxes (Uses & Balance)
               const SizedBox(height: 20),
@@ -108,8 +129,14 @@ class _HomePageState extends State<HomePage> {
                 padding: EdgeInsets.symmetric(horizontal: 16),
                 child: Align(
                   alignment: Alignment.centerLeft,
-                  child: Text("Machines", 
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                  child: Text(
+                    "Machines",
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
@@ -140,39 +167,41 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // --- TOP BAR (Original Style) ---
+  // --- TOP BAR ---
   Widget _topBar(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
-      //                ↑↑ more space at top
+    return Container(
+      height: 52, // controlled, premium header height
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Row(
-            children: [
-              Image.asset(
-                "assets/icons/logoWashSync.png",
-                height: 36, // slightly bigger = nicer balance
-                errorBuilder: (context, error, stackTrace) =>
-                    const Icon(Icons.local_laundry_service, color: Colors.white),
-              ),
-              const SizedBox(width: 10),
-              const Text(
-                "WashSync",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
+          // Logo
+          Image.asset(
+            "assets/icons/logoWashSync.png",
+            height: 52,
+            width: 52,
+            fit: BoxFit.contain,
+          ),
+
+          const SizedBox(width: 12),
+
+          // App name
+          const Text(
+            "WashSync",
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.3,
+              height: 1.0,
+            ),
           ),
         ],
       ),
     );
   }
 
-  // --- USER CARD (Original Welcome Layout) ---
+  // --- USER CARD ---
   Widget _userCard(User user) {
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
@@ -183,7 +212,22 @@ class _HomePageState extends State<HomePage> {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Container(
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [
+                  Color(0xFFA500FF),
+                  Color(0xFF7A00CC),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.purple.withOpacity(0.35),
+                  blurRadius: 16,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
             child: Row(
               children: [
                 const CircleAvatar(radius: 28, backgroundColor: Colors.purple, child: Icon(Icons.person, color: Colors.white)),
@@ -191,9 +235,22 @@ class _HomePageState extends State<HomePage> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text("Hello 👋", style: TextStyle(color: Colors.grey, fontSize: 13)),
-                    Text(data['username'] ?? "User", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    Text(data['email'] ?? "", style: const TextStyle(color: Colors.purple, fontSize: 13)),
+                    const Text("Hello~~~",
+                      style: TextStyle(color: Colors.white70, fontSize: 14)),
+
+                    Text(
+                      data['username'] ?? "User",
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+
+                    Text(
+                      data['email'] ?? "",
+                      style: const TextStyle(color: Colors.white70, fontSize: 14),
+                    ),
                   ],
                 ),
               ],
@@ -236,15 +293,19 @@ class _HomePageState extends State<HomePage> {
     return Expanded(
       child: Material(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
+        elevation: 6,
+        shadowColor: Colors.black.withOpacity(0.2),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(14),
+          splashColor: Colors.purple.withOpacity(0.15),
+          highlightColor: Colors.purple.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(20),
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
             child: Column(
               children: [
-                Icon(icon, color: Colors.purple, size: 24),
+                Icon(icon, color: Colors.purple, size: 34),
                 const SizedBox(height: 8),
                 Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 Text(label, style: const TextStyle(color: Colors.purple, fontSize: 12, fontWeight: FontWeight.w500)),
@@ -297,7 +358,14 @@ class _HomePageState extends State<HomePage> {
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   elevation: 0,
                 ),
-                child: const Text("VIEW", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                child: const Text(
+                  "View",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    letterSpacing: 0.5,
+                  ),
+                ),
               ),
             ],
           ),
@@ -313,13 +381,13 @@ class _HomePageState extends State<HomePage> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
-          color: const Color(0xFFB48DD6),
+          color: Colors.white.withOpacity(0.85),
           borderRadius: BorderRadius.circular(28),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.15),
-              blurRadius: 10,
-              offset: const Offset(0, 6),
+              color: Colors.black.withOpacity(0.12),
+              blurRadius: 20,
+              offset: const Offset(0, -6),
             ),
           ],
         ),
@@ -345,8 +413,8 @@ class _HomePageState extends State<HomePage> {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
           color: isActive
-              ? Colors.white.withOpacity(0.25)
-              : Colors.transparent,
+          ? Colors.purple.withOpacity(0.12)
+          : Colors.transparent,
           borderRadius: BorderRadius.circular(18),
         ),
         child: Column(
@@ -357,7 +425,7 @@ class _HomePageState extends State<HomePage> {
               duration: const Duration(milliseconds: 250),
               child: Icon(
                 item.icon,
-                color: isActive ? Colors.white : Colors.white70,
+                color: isActive ? Colors.purple : Colors.grey,
                 size: 24,
               ),
             ),
@@ -365,11 +433,12 @@ class _HomePageState extends State<HomePage> {
             Text(
               item.label,
               style: TextStyle(
-                color: isActive ? Colors.white : Colors.white70,
+                color: isActive ? Colors.purple : Colors.grey,
                 fontSize: 11,
                 fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
               ),
             ),
+
           ],
         ),
       ),

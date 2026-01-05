@@ -135,23 +135,27 @@ class _SignInPageState extends State<SignInPage> {
       body: SafeArea(
         child: Container(
           decoration: const BoxDecoration(
-            image: DecorationImage(
-              image: AssetImage("assets/images/backgroundColour.png"),
-              fit: BoxFit.cover,
+            gradient: LinearGradient(
+              colors: [Color(0xFFB388FF), Color(0xFFE1BEE7)],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
             ),
           ),
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 20),
             child: Column(
               children: [
-                const SizedBox(height: 40),
+                const SizedBox(height: 12),
 
-                Image.asset(
-                  "assets/icons/logoWashSync.png",
-                  height: 120,
+                Align(
+                  alignment: Alignment.center,
+                  child: Image.asset(
+                    "assets/icons/logoWashSync.png",
+                    height: 150,
+                    fit: BoxFit.contain,
+                  ),
                 ),
-
-                const SizedBox(height: 10),
+                const SizedBox(height: 4),
 
                 const Text(
                   "WashSync",
@@ -166,7 +170,7 @@ class _SignInPageState extends State<SignInPage> {
                   style: TextStyle(color: Colors.purple),
                 ),
 
-                const SizedBox(height: 40),
+                const SizedBox(height: 24),
 
                 /// CARD
                 Container(

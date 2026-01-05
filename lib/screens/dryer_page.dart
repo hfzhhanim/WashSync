@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'payment_screen.dart';
 
@@ -34,6 +35,23 @@ class Booking {
   bool isPaid;      
 
   Booking({required this.id, required this.machineId, required this.machineName, required this.userName, required this.startTime, required this.endTime, required this.remark, this.isConfirmed = false, this.isPaid = false});
+}
+
+Future<void> bookDryer() async {
+  final dryerRef =
+      FirebaseFirestore.instance.collection('machines').doc('dryer');
+
+  await FirebaseFirestore.instance.runTransaction((transaction) async {
+    final snapshot = await transaction.get(dryerRef);
+
+    int available = snapshot['available'];
+
+    if (available > 0) {
+      transaction.update(dryerRef, {
+        'available': available - 1,
+      });
+    }
+  });
 }
 
 // -------------------- MAIN SCREEN --------------------

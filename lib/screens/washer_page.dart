@@ -1,23 +1,17 @@
+import '../services/notification_service.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'payment_screen.dart';
-
-// -------------------- GLOBAL DATA STORAGE --------------------
-class WasherData {
-  static List<WashingMachine> machines = [];
-  static List<Booking> bookings = [];
-  static bool isInitialized = false; 
-}
 
 // -------------------- MODELS --------------------
 
 class WashingMachine {
-  final int id;
+  final String id;
   final String name;
-  DateTime? endTime; 
-  String? currentRemark; 
+  DateTime? endTime;
+  String? currentRemark;
 
   WashingMachine({
     required this.id,
@@ -25,18 +19,29 @@ class WashingMachine {
     this.endTime,
     this.currentRemark,
   });
+
+  factory WashingMachine.fromFirestore(Map<String, dynamic> data, String id) {
+    return WashingMachine(
+      id: id,
+      name: data['name'] ?? '',
+      currentRemark: data['currentRemark'] ?? '',
+      endTime: (data['endTime'] != null && data['endTime'] != "")
+          ? DateTime.parse(data['endTime'])
+          : null,
+    );
+  }
 }
 
 class Booking {
-  final int id;
-  final int machineId;
+  final String id;
+  final String machineId;
   final String machineName;
   final String userName;
   final DateTime startTime;
-  final DateTime endTime; 
+  final DateTime endTime;
   final String remark;
-  bool isConfirmed; 
-  bool isPaid;      
+  bool isConfirmed;
+  bool isPaid;
 
   Booking({
     required this.id,
@@ -47,7 +52,42 @@ class Booking {
     required this.endTime,
     required this.remark,
     this.isConfirmed = false,
-    this.isPaid = false, 
+    this.isPaid = false,
+  });
+
+  factory Booking.fromFirestore(Map<String, dynamic> data, String id) {
+    return Booking(
+      id: id,
+      machineId: data['machineId'] ?? '',
+      machineName: data['machineName'] ?? '',
+      userName: data['userName'] ?? '',
+      startTime: DateTime.parse(data['startTime']),
+      endTime: DateTime.parse(data['endTime']),
+      remark: data['remark'] ?? '',
+      isConfirmed: data['isConfirmed'] ?? false,
+      isPaid: data['isPaid'] ?? false,
+    );
+  }
+}
+
+Future<void> bookWasher() async {
+  final washerRef =
+      FirebaseFirestore.instance.collection('machines').doc('washer');
+
+  await FirebaseFirestore.instance.runTransaction((transaction) async {
+    final snapshot = await transaction.get(washerRef);
+
+    if (!snapshot.exists) return;
+
+    int available = snapshot['available'];
+
+    if (available <= 0) {
+      throw Exception("No washer available");
+    }
+
+    transaction.update(washerRef, {
+      'available': available - 1,
+    });
   });
 }
 
@@ -61,260 +101,326 @@ class WasherPage extends StatefulWidget {
 }
 
 class _WasherPageState extends State<WasherPage> {
-  final int _runTime = 30;    
-  final int _cycleTime = 35; 
-
   Timer? _timer;
-  Set<int> _notifiedBookings = {}; 
+  Timer? _cleanupTimer;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   @override
   void initState() {
     super.initState();
-    _initializeDataOnce(); 
-
+    _seedWashers();
+    _startAutoCancelCheck();
+    // This timer triggers a rebuild every second to update the countdown text
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted) {
-        setState(() {}); 
-        _checkTimeBasedLogic(); 
-      }
+      if (mounted) setState(() {});
     });
   }
 
-  void _initializeDataOnce() {
-    if (WasherData.isInitialized) return; 
+  Future<void> _seedWashers() async {
+    final washerCollection = _firestore.collection('washers');
+    final snapshot = await washerCollection.get();
+    if (snapshot.docs.isEmpty) {
+      for (int i = 1; i <= 5; i++) {
+        await washerCollection.doc(i.toString()).set({
+          'name': 'Washer $i',
+          'endTime': '',
+          'currentRemark': '',
+        });
+      }
+    }
+  }
 
-    DateTime now = DateTime.now();
-    
-    WasherData.machines = [
-      WashingMachine(id: 1, name: 'Washer 1'),
-      WashingMachine(id: 2, name: 'Washer 2'),
-      // Washer 3 is running
-      WashingMachine(
-        id: 3, 
-        name: 'Washer 3', 
-        endTime: now.add(const Duration(minutes: 14, seconds: 30)), 
-        currentRemark: "Washing whites"
-      ),
-      WashingMachine(id: 4, name: 'Washer 4'),
-      WashingMachine(id: 5, name: 'Washer 5'),
-    ];
+  void _startAutoCancelCheck() {
+    _cleanupTimer = Timer.periodic(const Duration(seconds: 10), (timer) async {
+      if (!mounted) return;
+      final now = DateTime.now();
+      final snapshot = await _firestore
+          .collection('bookings')
+          .where('isConfirmed', isEqualTo: false)
+          .get();
 
-    WasherData.isInitialized = true; 
+      for (var doc in snapshot.docs) {
+        final startTime = DateTime.parse(doc.data()['startTime']);
+        if (now.isAfter(startTime.add(const Duration(minutes: 1)))) {
+          await _firestore.collection('bookings').doc(doc.id).delete();
+        }
+      }
+    });
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _cleanupTimer?.cancel();
     super.dispose();
-  }
-
-  // --- LOGIC ENGINE ---
-  void _checkTimeBasedLogic() {
-    DateTime now = DateTime.now();
-
-    // 1. AUTO-CANCEL
-    WasherData.bookings.removeWhere((b) {
-      DateTime confirmDeadline = b.startTime.add(const Duration(minutes: 5));
-      if (now.isAfter(confirmDeadline) && !b.isPaid && b.userName == "You") {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Booking cancelled: You missed the 5-minute start window."), backgroundColor: Colors.red));
-        return true; 
-      }
-      return false;
-    });
-
-    // 2. NOTIFICATIONS
-    for (var b in WasherData.bookings) {
-      if (b.userName == "You" && !_notifiedBookings.contains(b.id)) {
-        // Notify 5 mins before start
-        DateTime notifyStart = b.startTime.subtract(const Duration(minutes: 5));
-        if (now.isAfter(notifyStart) && now.isBefore(b.startTime) && !b.isConfirmed) {
-          _showPopup("Ready?", "Your slot for ${b.machineName} starts in < 5 mins! Please confirm.");
-          _notifiedBookings.add(b.id);
-        }
-      }
-    }
-  }
-
-  void _showPopup(String title, String message) {
-    showDialog(context: context, builder: (ctx) => AlertDialog(title: Text(title), content: Text(message), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("OK"))]));
   }
 
   // --- ACTIONS ---
 
-  void _handleSaveBooking(Booking newBooking) {
-    setState(() { WasherData.bookings.add(newBooking); });
-    Navigator.pop(context);
+  void _handleSaveBooking(Booking newBooking) async {
+    final bookingRef = _firestore.collection('bookings');
+    try {
+      await _firestore.runTransaction((transaction) async {
+        QuerySnapshot existing = await bookingRef
+            .where('machineId', isEqualTo: newBooking.machineId)
+            .where('startTime', isEqualTo: newBooking.startTime.toIso8601String())
+            .get();
+
+        if (existing.docs.isNotEmpty) {
+          throw Exception("Slot taken!");
+        }
+
+        transaction.set(bookingRef.doc(), {
+          'machineId': newBooking.machineId,
+          'machineName': newBooking.machineName,
+          'userName': "You",
+          'startTime': newBooking.startTime.toIso8601String(),
+          'endTime': newBooking.endTime.toIso8601String(),
+          'remark': newBooking.remark,
+          'isConfirmed': false,
+          'isPaid': false,
+        });
+      });
+
+      int notifId = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      await NotificationService.scheduleBookingReminder(
+        notifId,
+        "Get Ready!",
+        "Your turn for ${newBooking.machineName} starts in 5 minutes!",
+        newBooking.startTime.subtract(const Duration(minutes: 5)),
+      );
+
+      if (mounted) {
+        Navigator.of(context).pop(); 
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted) _showSuccessPopup(newBooking);
+        });
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
   }
 
-  void _handleCancelBooking(int bookingId) {
-    setState(() { WasherData.bookings.removeWhere((b) => b.id == bookingId); });
+  void _showSuccessPopup(Booking booking) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Center(child: Icon(Icons.check_circle, color: Colors.green, size: 60)),
+        content: Text("Reserved ${booking.machineName}\nfor ${DateFormat('h:mm a').format(booking.startTime)}", textAlign: TextAlign.center),
+        actions: [Center(child: TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("OK")))],
+      ),
+    );
   }
 
-  void _handleConfirm(Booking booking) {
-    setState(() { booking.isConfirmed = true; });
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Confirmed! You can pay 2 mins before start."), backgroundColor: Colors.green));
+  void _handleCancelBooking(String bookingId) async {
+    await _firestore.collection('bookings').doc(bookingId).delete();
+  }
+
+  void _handleConfirm(String bookingId) async {
+    await _firestore.collection('bookings').doc(bookingId).update({'isConfirmed': true});
   }
 
   Future<void> _handlePayAndStart(Booking booking) async {
     final bool? success = await Navigator.push(context, MaterialPageRoute(builder: (_) => const PaymentScreen()));
+    
     if (success == true) {
-      setState(() {
-        booking.isPaid = true;
-        // Start Machine Logic
-        final index = WasherData.machines.indexWhere((m) => m.id == booking.machineId);
-        if (index != -1) {
-          WasherData.machines[index].endTime = DateTime.now().add(const Duration(minutes: 30));
-          WasherData.machines[index].currentRemark = booking.remark;
-        }
+      DateTime washEndTime = DateTime.now().add(const Duration(minutes: 30));
+      
+      // Update Booking
+      await _firestore.collection('bookings').doc(booking.id).update({'isPaid': true});
+      
+      // Update Machine status
+      await _firestore.collection('washers').doc(booking.machineId).update({
+        'endTime': washEndTime.toIso8601String(),
+        'currentRemark': "In Use",
       });
+
+      int finishNotifId = DateTime.now().millisecondsSinceEpoch ~/ 1000 + 10;
+      await NotificationService.scheduleBookingReminder(
+        finishNotifId,
+        "Laundry Almost Done! 🧺",
+        "Your machine will finish in 5 minutes, please pick it up.",
+        washEndTime.subtract(const Duration(minutes: 5)),
+      );
     }
   }
 
   String _formatDuration(Duration d) {
     String twoDigits(int n) => n.toString().padLeft(2, "0");
-    String twoDigitMinutes = twoDigits(d.inMinutes.remainder(60));
-    String twoDigitSeconds = twoDigits(d.inSeconds.remainder(60));
-    return "${twoDigits(d.inHours)}:$twoDigitMinutes:$twoDigitSeconds";
+    if (d.isNegative) return "00:00:00";
+    return "${twoDigits(d.inHours)}:${twoDigits(d.inMinutes.remainder(60))}:${twoDigits(d.inSeconds.remainder(60))}";
   }
-
-  // --- UI BUILDERS ---
 
   @override
   Widget build(BuildContext context) {
-    final myBookings = WasherData.bookings.where((b) => b.userName == "You").toList();
-
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Select Washer", style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFFB97AD9),
-        elevation: 0,
-        centerTitle: true,
+        title: const Text("WashSync", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)), 
+        backgroundColor: const Color(0xFFB97AD9), 
+        centerTitle: true
       ),
       body: Container(
-         decoration: const BoxDecoration(
-          gradient: LinearGradient(colors: [Color(0xFFF3E5F5), Colors.white], begin: Alignment.topCenter, end: Alignment.bottomCenter),
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(colors: [Color(0xFFF3E5F5), Colors.white], begin: Alignment.topCenter, end: Alignment.bottomCenter)
         ),
-        child: ListView(
-          padding: const EdgeInsets.all(16),
+        child: StreamBuilder<QuerySnapshot>(
+          stream: _firestore.collection('washers').snapshots(),
+          builder: (context, washerSnapshot) {
+            if (!washerSnapshot.hasData) return const Center(child: CircularProgressIndicator());
+            final machines = washerSnapshot.data!.docs.map((doc) => WashingMachine.fromFirestore(doc.data() as Map<String, dynamic>, doc.id)).toList();
+
+            return StreamBuilder<QuerySnapshot>(
+              stream: _firestore.collection('bookings').snapshots(),
+              builder: (context, bookingSnapshot) {
+                final allBookings = bookingSnapshot.hasData
+                    ? bookingSnapshot.data!.docs.map((doc) => Booking.fromFirestore(doc.data() as Map<String, dynamic>, doc.id)).toList()
+                    : <Booking>[];
+                
+                final myBookings = allBookings.where((b) {
+                  bool isUser = b.userName == "You";
+                  bool isStillValid = DateTime.now().isBefore(b.startTime.add(const Duration(minutes: 1)));
+                  return isUser && (isStillValid || b.isPaid);
+                }).toList();
+
+                return ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    if (myBookings.isNotEmpty) ...[
+                      const Text("My Bookings", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF6A1B9A))),
+                      const SizedBox(height: 12),
+                      ...myBookings.map((b) {
+                        WashingMachine machine = machines.firstWhere((m) => m.id == b.machineId);
+                        return _buildMyBookingCard(b, machine);
+                      }),
+                      const SizedBox(height: 24),
+                    ],
+                    const Text("All Washers", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF6A1B9A))),
+                    const SizedBox(height: 12),
+                    ...machines.map((m) => _buildWasherCard(m, allBookings)),
+                  ],
+                );
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMyBookingCard(Booking booking, WashingMachine machine) {
+    DateTime now = DateTime.now();
+    
+    // Check if THIS specific booking's machine is currently running the wash cycle
+    bool isCycleRunning = booking.isPaid && machine.endTime != null && now.isBefore(machine.endTime!);
+    bool isBeforeSlot = now.isBefore(booking.startTime);
+    bool isConfirmWindow = now.isAfter(booking.startTime.subtract(const Duration(minutes: 5))) && 
+                           now.isBefore(booking.startTime.add(const Duration(minutes: 1)));
+
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
           children: [
-            if (myBookings.isNotEmpty) ...[
-              const Text("My Bookings", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(booking.machineName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
+                if (!booking.isPaid) 
+                  IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red), onPressed: () => _handleCancelBooking(booking.id))
+                else
+                  const Icon(Icons.verified, color: Colors.blue, size: 20)
+              ],
+            ),
+            const Divider(),
+            const SizedBox(height: 8),
+
+            if (isCycleRunning) ...[
+              const Text("Wash Cycle In Progress", style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 16)),
               const SizedBox(height: 12),
-              ...myBookings.map((b) => _buildMyBookingCard(b)),
-              const SizedBox(height: 24),
+              // Simple Progress bar based on 30 min duration
+              LinearProgressIndicator(
+                value: machine.endTime!.difference(now).inSeconds / 1800, // 1800s = 30m
+                backgroundColor: Colors.blue.withOpacity(0.1),
+                color: Colors.blue,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                "Time Remaining: ${_formatDuration(machine.endTime!.difference(now))}",
+                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.blue, fontFamily: 'monospace'),
+              ),
+            ] else if (booking.isPaid && !isCycleRunning) ...[
+              const Column(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.green, size: 40),
+                  Text("Wash Completed!", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ] else if (isBeforeSlot && !isConfirmWindow) ...[
+              Text("Starts at ${DateFormat('h:mm a').format(booking.startTime)}", style: const TextStyle(fontSize: 16, color: Colors.grey, fontWeight: FontWeight.w500)),
+            ] else if (isConfirmWindow && !booking.isConfirmed) ...[
+               Column(
+                children: [
+                  SizedBox(width: double.infinity, child: ElevatedButton.icon(icon: const Icon(Icons.location_on), style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, foregroundColor: Colors.white), onPressed: () => _handleConfirm(booking.id), label: const Text("CONFIRM ARRIVAL"))),
+                  Text("Expires in: ${_formatDuration(booking.startTime.add(const Duration(minutes: 1)).difference(now).abs())}", style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ] else if (booking.isConfirmed && !booking.isPaid) ...[
+               SizedBox(width: double.infinity, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFB97AD9), foregroundColor: Colors.white), onPressed: () => _handlePayAndStart(booking), child: const Text("PAY NOW & START"))),
             ],
-            const Text("All Washers", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-            const SizedBox(height: 12),
-            ...WasherData.machines.map((m) => _buildWasherCard(m)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildMyBookingCard(Booking booking) {
-    DateTime now = DateTime.now();
-    bool isTomorrow = booking.startTime.day != now.day;
-    String dayPrefix = isTomorrow ? "Tomorrow, " : "";
-
-    // --- TIMING LOGIC UPDATE ---
-    // 1. Confirm Window: 5 mins BEFORE start time
-    bool isConfirmWindow = now.isAfter(booking.startTime.subtract(const Duration(minutes: 5))) && now.isBefore(booking.startTime);
-    
-    // 2. Pay Window: Starts 2 mins BEFORE start time, ends 5 mins AFTER start time
-    bool isPayWindow = now.isAfter(booking.startTime.subtract(const Duration(minutes: 2))) && 
-                       now.isBefore(booking.startTime.add(const Duration(minutes: 5)));
-
-    String statusLabel = "Reserved"; Color statusColor = Colors.orange;
-    if (booking.isPaid) { statusLabel = "Running"; statusColor = Colors.green; }
-    else if (booking.isConfirmed) { statusLabel = "Confirmed"; statusColor = Colors.blue; }
-    else if (isConfirmWindow) { statusLabel = "Action Needed"; statusColor = Colors.redAccent; }
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12), padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.purple.shade100), boxShadow: [BoxShadow(color: Colors.purple.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))]),
-      child: Column(children: [
-          Row(children: [
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Row(children: [Text(booking.machineName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)), const SizedBox(width: 8), Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: statusColor.withOpacity(0.1), borderRadius: BorderRadius.circular(6)), child: Text(statusLabel, style: TextStyle(color: statusColor, fontSize: 12, fontWeight: FontWeight.bold)))]),
-                  const SizedBox(height: 8), Text("$dayPrefix${DateFormat('h:mm a').format(booking.startTime)} - ${DateFormat('h:mm a').format(booking.endTime)}", style: TextStyle(color: Colors.grey.shade600, fontSize: 14))
-              ])),
-              if (!booking.isPaid) GestureDetector(onTap: () => _handleCancelBooking(booking.id), child: const Padding(padding: EdgeInsets.all(8.0), child: Icon(Icons.delete_outline, color: Colors.red)))
-          ]),
-          const SizedBox(height: 16),
-          
-          if (booking.isPaid) 
-             Container(width: double.infinity, padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(8)), child: const Center(child: Text("Cycle in Progress ⏳", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold))))
-          else if (isPayWindow) 
-             SizedBox(width: double.infinity, child: ElevatedButton(onPressed: booking.isConfirmed ? () => _handlePayAndStart(booking) : null, style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFB97AD9), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), child: Text(booking.isConfirmed ? "PAY NOW & START" : "Missed Confirmation!", style: const TextStyle(fontWeight: FontWeight.bold))))
-          else if (isConfirmWindow && !booking.isConfirmed) 
-             SizedBox(width: double.infinity, child: ElevatedButton.icon(onPressed: () => _handleConfirm(booking), icon: const Icon(Icons.thumb_up_alt_outlined, size: 18), label: const Text("Confirm I'm Here", style: TextStyle(fontWeight: FontWeight.bold)), style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)))))
-          else 
-             Container(width: double.infinity, padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(8)), child: const Center(child: Text("Waiting for slot time...", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold))))
-      ]),
-    );
-  }
-
-  Widget _buildWasherCard(WashingMachine machine) {
+  Widget _buildWasherCard(WashingMachine machine, List<Booking> allBookings) {
     DateTime now = DateTime.now();
     bool isRunning = machine.endTime != null && now.isBefore(machine.endTime!);
-    
-    // Check Future Bookings
-    List<Booking> futureBookings = WasherData.bookings.where((b) => b.machineId == machine.id && b.startTime.isAfter(now)).toList();
-    futureBookings.sort((a, b) => a.startTime.compareTo(b.startTime));
-    
-    String statusText = "Available";
-    Color statusColor = Colors.green;
-    IconData statusIcon = Icons.check_circle_outline;
-    String? subText;
-
-    if (isRunning) {
-      statusText = "Running"; statusColor = Colors.blue; statusIcon = Icons.local_laundry_service;
-      if (machine.currentRemark != null) subText = "Note: ${machine.currentRemark}";
-    } else if (futureBookings.isNotEmpty) {
-      Booking next = futureBookings.first;
-      String start = DateFormat('h:mm').format(next.startTime);
-      String end = DateFormat('h:mm a').format(next.endTime);
-      statusText = "Booked ($start - $end)"; statusColor = Colors.orange; statusIcon = Icons.schedule;
-    }
-
-    String timeRemaining = "";
-    if (isRunning) {
-      final diff = machine.endTime!.difference(now);
-      timeRemaining = _formatDuration(diff);
-    }
+    Color statusColor = isRunning ? Colors.blue : Colors.green;
 
     return GestureDetector(
-      onTap: () {
-        showModalBottomSheet(context: context, isScrollControlled: true, backgroundColor: Colors.transparent, builder: (c) => BookingModal(machine: machine, existingBookings: WasherData.bookings.where((b) => b.machineId == machine.id).toList(), onSave: _handleSaveBooking));
-      },
+      onTap: () => showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (c) => BookingModal(
+          machine: machine,
+          existingBookings: allBookings, 
+          onSave: _handleSaveBooking,
+        ),
+      ),
       child: Container(
-        margin: const EdgeInsets.only(bottom: 16), padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 6, offset: const Offset(0, 2))], border: Border.all(color: statusColor.withOpacity(0.3), width: 1.5)),
-        child: Column(children: [
-            Row(children: [
-                Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: statusColor.withOpacity(0.1), shape: BoxShape.circle), child: Icon(statusIcon, color: statusColor, size: 28)),
-                const SizedBox(width: 16),
-                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(machine.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    const SizedBox(height: 4),
-                    Text(statusText, style: TextStyle(color: statusColor, fontSize: 13, fontWeight: FontWeight.bold)),
-                    if (subText != null) Text(subText!, style: const TextStyle(color: Colors.grey, fontSize: 11))
-                ])),
-                Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), decoration: BoxDecoration(color: const Color(0xFFB97AD9), borderRadius: BorderRadius.circular(20)), child: const Text("Select Slot", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)))
-            ]),
-            if (timeRemaining.isNotEmpty) ...[const SizedBox(height: 12), Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 8), decoration: BoxDecoration(color: Colors.blue.withOpacity(0.05), borderRadius: BorderRadius.circular(8)), child: Center(child: Text(timeRemaining, style: const TextStyle(color: Colors.blue, fontSize: 24, fontWeight: FontWeight.w900, fontFamily: 'Courier'))))]
-        ]),
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: statusColor.withOpacity(0.3), width: 1.5)),
+        child: Row(
+          children: [
+            Icon(isRunning ? Icons.local_laundry_service : Icons.check_circle_outline, color: statusColor, size: 28),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(machine.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                Text(isRunning ? "Status: Busy" : "Status: Available", style: TextStyle(color: statusColor, fontSize: 13, fontWeight: FontWeight.bold)),
+              ]),
+            ),
+            if (isRunning) Text(_formatDuration(machine.endTime!.difference(now)), style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 18, fontFamily: 'monospace')),
+          ],
+        ),
       ),
     );
   }
 }
 
-// -------------------- BOOKING MODAL --------------------
+// -------------------- BOOKING MODAL (Time Slot Selection) --------------------
 
 class BookingModal extends StatefulWidget {
   final WashingMachine machine;
-  final List<Booking> existingBookings; 
+  final List<Booking> existingBookings;
   final Function(Booking) onSave;
 
   const BookingModal({super.key, required this.machine, required this.existingBookings, required this.onSave});
@@ -325,90 +431,98 @@ class BookingModal extends StatefulWidget {
 
 class _BookingModalState extends State<BookingModal> {
   DateTime? _selectedSlot;
-  final TextEditingController _remarkController = TextEditingController();
   List<Map<String, dynamic>> _slots = [];
-  final int _slotDuration = 35; // 35 Mins Strict
-  bool _showingTomorrow = false;
+  final int _slotDuration = 35;
 
   @override
   void initState() {
     super.initState();
     _generateSlots();
-    _remarkController.text = ""; 
   }
 
   void _generateSlots() {
     _slots.clear();
-    _showingTomorrow = false;
     DateTime now = DateTime.now();
-
-    _generateSlotsForDay(now, "Today");
-
-    if (_slots.length < 2) {
-      _showingTomorrow = true;
-      DateTime tomorrow = now.add(const Duration(days: 1));
-      _generateSlotsForDay(tomorrow, "Tomorrow");
-    }
-    
-    final firstAvailable = _slots.firstWhere((s) => s['isTaken'] == false, orElse: () => {});
-    if (firstAvailable.isNotEmpty) _selectedSlot = firstAvailable['date'];
-  }
-
-  void _generateSlotsForDay(DateTime date, String label) {
-    DateTime runner = DateTime(date.year, date.month, date.day, 0, 0);
-    DateTime endOfDay = DateTime(date.year, date.month, date.day, 23, 59);
+    DateTime runner = DateTime(now.year, now.month, now.day, 0, 0);
+    DateTime endOfDay = DateTime(now.year, now.month, now.day, 23, 59);
 
     while (runner.isBefore(endOfDay)) {
-      if (runner.isBefore(DateTime.now())) { runner = runner.add(Duration(minutes: _slotDuration)); continue; }
-      
+      if (runner.isBefore(now)) { runner = runner.add(Duration(minutes: _slotDuration)); continue; }
       DateTime slotStart = runner;
       DateTime slotEnd = runner.add(Duration(minutes: _slotDuration));
-      bool isTaken = widget.existingBookings.any((booking) => slotStart.isBefore(booking.endTime) && slotEnd.isAfter(booking.startTime));
-
-      _slots.add({'date': runner, 'label': label, 'isTaken': isTaken});
+      bool isTaken = widget.existingBookings.any((booking) {
+        bool overlaps = slotStart.isBefore(booking.endTime) && slotEnd.isAfter(booking.startTime);
+        bool isValid = booking.isPaid || DateTime.now().isBefore(booking.startTime.add(const Duration(minutes: 1)));
+        return overlaps && isValid && booking.machineId == widget.machine.id;
+      });
+      _slots.add({'date': runner, 'isTaken': isTaken});
       runner = runner.add(Duration(minutes: _slotDuration));
     }
+    final firstAvailable = _slots.firstWhere((s) => s['isTaken'] == false, orElse: () => {});
+    if (firstAvailable.isNotEmpty) _selectedSlot = firstAvailable['date'];
   }
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: MediaQuery.of(context).size.height * 0.85,
+      height: MediaQuery.of(context).size.height * 0.8,
       decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text("Book ${widget.machine.name}", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              if (widget.machine.currentRemark != null) Text("Note: ${widget.machine.currentRemark}", style: TextStyle(color: Colors.red.shade700, fontSize: 12, fontWeight: FontWeight.bold)),
-            ]),
+            Text("Select Slot: ${widget.machine.name}", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context))
           ]),
           const Divider(),
-          const SizedBox(height: 10),
-          Row(children: [const Text("Select Time Slot", style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey)), if (_showingTomorrow) Container(margin: const EdgeInsets.only(left: 10), padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(4)), child: const Text("Displaying Next Day", style: TextStyle(fontSize: 10, color: Colors.blue, fontWeight: FontWeight.bold)))]),
-          const SizedBox(height: 10),
-          Expanded(child: _slots.isEmpty ? const Center(child: Text("No slots available.")) : ListView.separated(itemCount: _slots.length, separatorBuilder: (c, i) => const SizedBox(height: 10), itemBuilder: (context, index) {
-            final slotData = _slots[index];
-            final DateTime slotTime = slotData['date'];
-            final bool isTaken = slotData['isTaken'];
-            final isSelected = _selectedSlot == slotTime;
-            Color bgColor = isTaken ? Colors.grey.shade100 : (isSelected ? const Color(0xFFB97AD9).withOpacity(0.1) : Colors.white);
-            Color borderColor = isTaken ? Colors.transparent : (isSelected ? const Color(0xFFB97AD9) : Colors.grey.shade300);
-            Color textColor = isTaken ? Colors.grey.shade400 : (isSelected ? const Color(0xFFB97AD9) : Colors.black87);
-            return GestureDetector(onTap: isTaken ? null : () => setState(() => _selectedSlot = slotTime), child: Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14), decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderColor, width: isSelected ? 2 : 1)), child: Row(children: [Icon(isTaken ? Icons.block : (isSelected ? Icons.check_circle : Icons.radio_button_unchecked), size: 18, color: textColor), const SizedBox(width: 12), Text(DateFormat('h:mm a').format(slotTime), style: TextStyle(fontWeight: FontWeight.bold, color: textColor)), if (isTaken) const Spacer(), if (isTaken) const Text("Unavailable", style: TextStyle(fontSize: 12, color: Colors.grey))])));
-          })),
+          Expanded(
+            child: ListView.separated(
+              itemCount: _slots.length,
+              separatorBuilder: (c, i) => const SizedBox(height: 10),
+              itemBuilder: (context, index) {
+                final slot = _slots[index];
+                final bool isTaken = slot['isTaken'];
+                final bool isSelected = _selectedSlot == slot['date'];
+                return GestureDetector(
+                  onTap: isTaken ? null : () => setState(() => _selectedSlot = slot['date']),
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: isTaken ? Colors.grey[100] : (isSelected ? const Color(0xFFB97AD9).withOpacity(0.1) : Colors.white),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: isSelected ? const Color(0xFFB97AD9) : Colors.grey[300]!, width: isSelected ? 2 : 1),
+                    ),
+                    child: Row(children: [
+                      Icon(isTaken ? Icons.block : (isSelected ? Icons.check_circle : Icons.radio_button_unchecked), color: isSelected ? const Color(0xFFB97AD9) : Colors.grey),
+                      const SizedBox(width: 12),
+                      Text(DateFormat('h:mm a').format(slot['date']), style: const TextStyle(fontWeight: FontWeight.bold)),
+                      if (isTaken) ...[const Spacer(), const Text("Reserved", style: TextStyle(color: Colors.red, fontSize: 12))]
+                    ]),
+                  ),
+                );
+              },
+            ),
+          ),
           const SizedBox(height: 20),
-          const Text("Note for next user (Optional)", style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey)),
-          const SizedBox(height: 8),
-          TextField(controller: _remarkController, decoration: InputDecoration(hintText: "e.g. Please take out my clothes", filled: true, fillColor: Colors.grey[50], border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none))),
-          const SizedBox(height: 20),
-          SizedBox(width: double.infinity, child: ElevatedButton(onPressed: _selectedSlot == null ? null : () {
-            final booking = Booking(id: DateTime.now().millisecondsSinceEpoch, machineId: widget.machine.id, machineName: widget.machine.name, userName: "You", startTime: _selectedSlot!, endTime: _selectedSlot!.add(Duration(minutes: _slotDuration)), remark: _remarkController.text.isEmpty ? "Reserved" : _remarkController.text);
-            widget.onSave(booking);
-          }, style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFB97AD9), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), child: const Text("Confirm Reservation (Free)", style: TextStyle(fontWeight: FontWeight.bold)))),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _selectedSlot == null ? null : () {
+                final booking = Booking(
+                  id: DateTime.now().millisecondsSinceEpoch.toString(),
+                  machineId: widget.machine.id,
+                  machineName: widget.machine.name,
+                  userName: "You",
+                  startTime: _selectedSlot!,
+                  endTime: _selectedSlot!.add(Duration(minutes: _slotDuration)),
+                  remark: "",
+                );
+                widget.onSave(booking);
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFB97AD9), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+              child: const Text("Confirm Reservation"),
+            ),
+          ),
           const SizedBox(height: 30),
         ],
       ),
