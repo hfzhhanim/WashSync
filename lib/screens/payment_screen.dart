@@ -7,7 +7,15 @@ import 'wallet_page.dart';
 import 'success_popup.dart';
 
 class PaymentScreen extends StatefulWidget {
-  const PaymentScreen({super.key});
+  // FIXED: Added these parameters to accept data from Washer/Dryer pages
+  final String machineType;
+  final String machineNo;
+
+  const PaymentScreen({
+    super.key, 
+    this.machineType = "Washer", 
+    this.machineNo = "1",
+  });
 
   @override
   State<PaymentScreen> createState() => _PaymentScreenState();
@@ -30,6 +38,26 @@ class _PaymentScreenState extends State<PaymentScreen> {
   double get totalPrice {
     final total = basePrice - promoDiscountValue;
     return total < 0 ? 0 : total;
+  }
+
+  // --- NEW: LOGIC TO ADD RECORD TO USAGE HISTORY ---
+  Future<void> _recordUsageHistory() async {
+    if (user == null) return;
+
+    try {
+      await FirebaseFirestore.instance.collection('usage_history').add({
+        'userId': user!.uid,
+        'type': widget.machineType, // e.g. "Washer"
+        'no': widget.machineNo,     // e.g. "5"
+        'time': FieldValue.serverTimestamp(),
+        'duration': 30,             
+        'price': totalPrice,
+        'status': 'Completed',      
+      });
+      print("History record added successfully!");
+    } catch (e) {
+      debugPrint("Error adding history: $e");
+    }
   }
 
   Widget _walletBalanceDisplay() {
@@ -131,6 +159,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
     }
 
     if (success == true) {
+      // --- ADDED: CREATE HISTORY RECORD BEFORE SHOWING SUCCESS POPUP ---
+      await _recordUsageHistory();
+
       if (mounted) {
         await showDialog(
           context: context,
@@ -139,9 +170,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
             amount: totalPrice,
             paymentMethod: _paymentMethodName(),
             onOk: () {
-              // 1. Close the SuccessPopup dialog
               Navigator.pop(popupContext); 
-              // 2. Return to WasherPage by closing PaymentScreen
               Navigator.pop(context, true); 
             },
           ),

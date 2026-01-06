@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:collection/collection.dart'; 
 import 'payment_screen.dart';
 
 // -------------------- MODELS --------------------
@@ -39,7 +40,7 @@ class Booking {
   final String userName;
   final DateTime startTime;
   final DateTime endTime;
-  final String remark;
+  final String type; 
   bool isConfirmed;
   bool isPaid;
 
@@ -50,7 +51,7 @@ class Booking {
     required this.userName,
     required this.startTime,
     required this.endTime,
-    required this.remark,
+    required this.type,
     this.isConfirmed = false,
     this.isPaid = false,
   });
@@ -63,32 +64,11 @@ class Booking {
       userName: data['userName'] ?? '',
       startTime: DateTime.parse(data['startTime']),
       endTime: DateTime.parse(data['endTime']),
-      remark: data['remark'] ?? '',
+      type: data['type'] ?? 'Washer',
       isConfirmed: data['isConfirmed'] ?? false,
       isPaid: data['isPaid'] ?? false,
     );
   }
-}
-
-Future<void> bookWasher() async {
-  final washerRef =
-      FirebaseFirestore.instance.collection('machines').doc('washer');
-
-  await FirebaseFirestore.instance.runTransaction((transaction) async {
-    final snapshot = await transaction.get(washerRef);
-
-    if (!snapshot.exists) return;
-
-    int available = snapshot['available'];
-
-    if (available <= 0) {
-      throw Exception("No washer available");
-    }
-
-    transaction.update(washerRef, {
-      'available': available - 1,
-    });
-  });
 }
 
 // -------------------- MAIN SCREEN --------------------
@@ -110,7 +90,6 @@ class _WasherPageState extends State<WasherPage> {
     super.initState();
     _seedWashers();
     _startAutoCancelCheck();
-    // This timer triggers a rebuild every second to update the countdown text
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) setState(() {});
     });
@@ -140,9 +119,12 @@ class _WasherPageState extends State<WasherPage> {
           .get();
 
       for (var doc in snapshot.docs) {
-        final startTime = DateTime.parse(doc.data()['startTime']);
-        if (now.isAfter(startTime.add(const Duration(minutes: 1)))) {
-          await _firestore.collection('bookings').doc(doc.id).delete();
+        final startTimeString = doc.data()['startTime'];
+        if (startTimeString != null) {
+          final startTime = DateTime.parse(startTimeString);
+          if (now.isAfter(startTime.add(const Duration(minutes: 1)))) {
+            await _firestore.collection('bookings').doc(doc.id).delete();
+          }
         }
       }
     });
@@ -155,8 +137,6 @@ class _WasherPageState extends State<WasherPage> {
     super.dispose();
   }
 
-  // --- ACTIONS ---
-
   void _handleSaveBooking(Booking newBooking) async {
     final bookingRef = _firestore.collection('bookings');
     try {
@@ -166,35 +146,23 @@ class _WasherPageState extends State<WasherPage> {
             .where('startTime', isEqualTo: newBooking.startTime.toIso8601String())
             .get();
 
-        if (existing.docs.isNotEmpty) {
-          throw Exception("Slot taken!");
-        }
+        if (existing.docs.isNotEmpty) throw Exception("Slot taken!");
 
         transaction.set(bookingRef.doc(), {
           'machineId': newBooking.machineId,
           'machineName': newBooking.machineName,
           'userName': "You",
+          'type': 'Washer', 
           'startTime': newBooking.startTime.toIso8601String(),
           'endTime': newBooking.endTime.toIso8601String(),
-          'remark': newBooking.remark,
           'isConfirmed': false,
           'isPaid': false,
         });
       });
 
-      int notifId = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-      await NotificationService.scheduleBookingReminder(
-        notifId,
-        "Get Ready!",
-        "Your turn for ${newBooking.machineName} starts in 5 minutes!",
-        newBooking.startTime.subtract(const Duration(minutes: 5)),
-      );
-
       if (mounted) {
         Navigator.of(context).pop(); 
-        Future.delayed(const Duration(milliseconds: 300), () {
-          if (mounted) _showSuccessPopup(newBooking);
-        });
+        _showSuccessPopup(newBooking);
       }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
@@ -224,26 +192,13 @@ class _WasherPageState extends State<WasherPage> {
 
   Future<void> _handlePayAndStart(Booking booking) async {
     final bool? success = await Navigator.push(context, MaterialPageRoute(builder: (_) => const PaymentScreen()));
-    
     if (success == true) {
       DateTime washEndTime = DateTime.now().add(const Duration(minutes: 30));
-      
-      // Update Booking
       await _firestore.collection('bookings').doc(booking.id).update({'isPaid': true});
-      
-      // Update Machine status
       await _firestore.collection('washers').doc(booking.machineId).update({
         'endTime': washEndTime.toIso8601String(),
         'currentRemark': "In Use",
       });
-
-      int finishNotifId = DateTime.now().millisecondsSinceEpoch ~/ 1000 + 10;
-      await NotificationService.scheduleBookingReminder(
-        finishNotifId,
-        "Laundry Almost Done! 🧺",
-        "Your machine will finish in 5 minutes, please pick it up.",
-        washEndTime.subtract(const Duration(minutes: 5)),
-      );
     }
   }
 
@@ -257,7 +212,7 @@ class _WasherPageState extends State<WasherPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("WashSync", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)), 
+        title: const Text("WashSync - Washer", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)), 
         backgroundColor: const Color(0xFFB97AD9), 
         centerTitle: true
       ),
@@ -272,25 +227,33 @@ class _WasherPageState extends State<WasherPage> {
             final machines = washerSnapshot.data!.docs.map((doc) => WashingMachine.fromFirestore(doc.data() as Map<String, dynamic>, doc.id)).toList();
 
             return StreamBuilder<QuerySnapshot>(
-              stream: _firestore.collection('bookings').snapshots(),
+              stream: _firestore.collection('bookings')
+                  .where('type', isEqualTo: 'Washer')
+                  .snapshots(),
               builder: (context, bookingSnapshot) {
                 final allBookings = bookingSnapshot.hasData
                     ? bookingSnapshot.data!.docs.map((doc) => Booking.fromFirestore(doc.data() as Map<String, dynamic>, doc.id)).toList()
                     : <Booking>[];
                 
-                final myBookings = allBookings.where((b) {
-                  bool isUser = b.userName == "You";
-                  bool isStillValid = DateTime.now().isBefore(b.startTime.add(const Duration(minutes: 1)));
-                  return isUser && (isStillValid || b.isPaid);
+                DateTime now = DateTime.now();
+                
+                final myActiveBookings = allBookings.where((b) {
+                  if (b.userName != "You") return false;
+                  final machine = machines.firstWhereOrNull((m) => m.id == b.machineId);
+                  if (machine == null) return false;
+
+                  bool isRunning = b.isPaid && machine.endTime != null && now.isBefore(machine.endTime!);
+                  bool isUpcoming = !b.isPaid && now.isBefore(b.startTime.add(const Duration(minutes: 1)));
+                  return isRunning || isUpcoming;
                 }).toList();
 
                 return ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
-                    if (myBookings.isNotEmpty) ...[
-                      const Text("My Bookings", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF6A1B9A))),
+                    if (myActiveBookings.isNotEmpty) ...[
+                      const Text("My Washer Bookings", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF6A1B9A))),
                       const SizedBox(height: 12),
-                      ...myBookings.map((b) {
+                      ...myActiveBookings.map((b) {
                         WashingMachine machine = machines.firstWhere((m) => m.id == b.machineId);
                         return _buildMyBookingCard(b, machine);
                       }),
@@ -309,10 +272,9 @@ class _WasherPageState extends State<WasherPage> {
     );
   }
 
+  // --- BUILD CARDS REMAIN THE SAME ---
   Widget _buildMyBookingCard(Booking booking, WashingMachine machine) {
     DateTime now = DateTime.now();
-    
-    // Check if THIS specific booking's machine is currently running the wash cycle
     bool isCycleRunning = booking.isPaid && machine.endTime != null && now.isBefore(machine.endTime!);
     bool isBeforeSlot = now.isBefore(booking.startTime);
     bool isConfirmWindow = now.isAfter(booking.startTime.subtract(const Duration(minutes: 5))) && 
@@ -337,38 +299,21 @@ class _WasherPageState extends State<WasherPage> {
               ],
             ),
             const Divider(),
-            const SizedBox(height: 8),
-
             if (isCycleRunning) ...[
               const Text("Wash Cycle In Progress", style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 16)),
               const SizedBox(height: 12),
-              // Simple Progress bar based on 30 min duration
               LinearProgressIndicator(
-                value: machine.endTime!.difference(now).inSeconds / 1800, // 1800s = 30m
+                value: 1 - (machine.endTime!.difference(now).inSeconds / 1800), 
                 backgroundColor: Colors.blue.withOpacity(0.1),
                 color: Colors.blue,
               ),
               const SizedBox(height: 12),
-              Text(
-                "Time Remaining: ${_formatDuration(machine.endTime!.difference(now))}",
-                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.blue, fontFamily: 'monospace'),
-              ),
-            ] else if (booking.isPaid && !isCycleRunning) ...[
-              const Column(
-                children: [
-                  Icon(Icons.check_circle, color: Colors.green, size: 40),
-                  Text("Wash Completed!", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-                ],
-              ),
+              Text("Time Remaining: ${_formatDuration(machine.endTime!.difference(now))}",
+                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.blue, fontFamily: 'monospace')),
             ] else if (isBeforeSlot && !isConfirmWindow) ...[
-              Text("Starts at ${DateFormat('h:mm a').format(booking.startTime)}", style: const TextStyle(fontSize: 16, color: Colors.grey, fontWeight: FontWeight.w500)),
+              Text("Starts at ${DateFormat('h:mm a').format(booking.startTime)}", style: const TextStyle(fontSize: 16, color: Colors.grey)),
             ] else if (isConfirmWindow && !booking.isConfirmed) ...[
-               Column(
-                children: [
-                  SizedBox(width: double.infinity, child: ElevatedButton.icon(icon: const Icon(Icons.location_on), style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, foregroundColor: Colors.white), onPressed: () => _handleConfirm(booking.id), label: const Text("CONFIRM ARRIVAL"))),
-                  Text("Expires in: ${_formatDuration(booking.startTime.add(const Duration(minutes: 1)).difference(now).abs())}", style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                ],
-              ),
+               SizedBox(width: double.infinity, child: ElevatedButton.icon(icon: const Icon(Icons.location_on), style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, foregroundColor: Colors.white), onPressed: () => _handleConfirm(booking.id), label: const Text("CONFIRM ARRIVAL"))),
             ] else if (booking.isConfirmed && !booking.isPaid) ...[
                SizedBox(width: double.infinity, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFB97AD9), foregroundColor: Colors.white), onPressed: () => _handlePayAndStart(booking), child: const Text("PAY NOW & START"))),
             ],
@@ -379,10 +324,6 @@ class _WasherPageState extends State<WasherPage> {
   }
 
   Widget _buildWasherCard(WashingMachine machine, List<Booking> allBookings) {
-    DateTime now = DateTime.now();
-    bool isRunning = machine.endTime != null && now.isBefore(machine.endTime!);
-    Color statusColor = isRunning ? Colors.blue : Colors.green;
-
     return GestureDetector(
       onTap: () => showModalBottomSheet(
         context: context,
@@ -397,18 +338,12 @@ class _WasherPageState extends State<WasherPage> {
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: statusColor.withOpacity(0.3), width: 1.5)),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.purple.withOpacity(0.1), width: 1.5)),
         child: Row(
           children: [
-            Icon(isRunning ? Icons.local_laundry_service : Icons.check_circle_outline, color: statusColor, size: 28),
+            const Icon(Icons.local_laundry_service, color: Colors.purple, size: 28),
             const SizedBox(width: 16),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(machine.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                Text(isRunning ? "Status: Busy" : "Status: Available", style: TextStyle(color: statusColor, fontSize: 13, fontWeight: FontWeight.bold)),
-              ]),
-            ),
-            if (isRunning) Text(_formatDuration(machine.endTime!.difference(now)), style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 18, fontFamily: 'monospace')),
+            Expanded(child: Text(machine.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
           ],
         ),
       ),
@@ -416,7 +351,7 @@ class _WasherPageState extends State<WasherPage> {
   }
 }
 
-// -------------------- BOOKING MODAL (Time Slot Selection) --------------------
+// -------------------- BOOKING MODAL (PAST SLOT FIX) --------------------
 
 class BookingModal extends StatefulWidget {
   final WashingMachine machine;
@@ -447,19 +382,28 @@ class _BookingModalState extends State<BookingModal> {
     DateTime endOfDay = DateTime(now.year, now.month, now.day, 23, 59);
 
     while (runner.isBefore(endOfDay)) {
-      if (runner.isBefore(now)) { runner = runner.add(Duration(minutes: _slotDuration)); continue; }
       DateTime slotStart = runner;
       DateTime slotEnd = runner.add(Duration(minutes: _slotDuration));
+
+      // FIX: If the slot end time is in the past, don't show it
+      if (slotEnd.isBefore(now)) { 
+        runner = runner.add(Duration(minutes: _slotDuration)); 
+        continue; 
+      }
+
       bool isTaken = widget.existingBookings.any((booking) {
+        if (booking.machineId != widget.machine.id) return false;
         bool overlaps = slotStart.isBefore(booking.endTime) && slotEnd.isAfter(booking.startTime);
-        bool isValid = booking.isPaid || DateTime.now().isBefore(booking.startTime.add(const Duration(minutes: 1)));
-        return overlaps && isValid && booking.machineId == widget.machine.id;
+        bool isValid = booking.isPaid || now.isBefore(booking.startTime.add(const Duration(minutes: 1)));
+        return overlaps && isValid;
       });
+      
       _slots.add({'date': runner, 'isTaken': isTaken});
       runner = runner.add(Duration(minutes: _slotDuration));
     }
-    final firstAvailable = _slots.firstWhere((s) => s['isTaken'] == false, orElse: () => {});
-    if (firstAvailable.isNotEmpty) _selectedSlot = firstAvailable['date'];
+    
+    final firstAvailable = _slots.firstWhereOrNull((s) => !s['isTaken']);
+    if (firstAvailable != null) _selectedSlot = firstAvailable['date'];
   }
 
   @override
@@ -467,13 +411,10 @@ class _BookingModalState extends State<BookingModal> {
     return Container(
       height: MediaQuery.of(context).size.height * 0.8,
       decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+      padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Text("Select Slot: ${widget.machine.name}", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context))
-          ]),
+          Text("Select Slot: ${widget.machine.name}", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const Divider(),
           Expanded(
             child: ListView.separated(
@@ -490,20 +431,18 @@ class _BookingModalState extends State<BookingModal> {
                     decoration: BoxDecoration(
                       color: isTaken ? Colors.grey[100] : (isSelected ? const Color(0xFFB97AD9).withOpacity(0.1) : Colors.white),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: isSelected ? const Color(0xFFB97AD9) : Colors.grey[300]!, width: isSelected ? 2 : 1),
+                      border: Border.all(color: isSelected ? const Color(0xFFB97AD9) : Colors.grey[300]!),
                     ),
                     child: Row(children: [
                       Icon(isTaken ? Icons.block : (isSelected ? Icons.check_circle : Icons.radio_button_unchecked), color: isSelected ? const Color(0xFFB97AD9) : Colors.grey),
                       const SizedBox(width: 12),
                       Text(DateFormat('h:mm a').format(slot['date']), style: const TextStyle(fontWeight: FontWeight.bold)),
-                      if (isTaken) ...[const Spacer(), const Text("Reserved", style: TextStyle(color: Colors.red, fontSize: 12))]
                     ]),
                   ),
                 );
               },
             ),
           ),
-          const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
@@ -515,15 +454,14 @@ class _BookingModalState extends State<BookingModal> {
                   userName: "You",
                   startTime: _selectedSlot!,
                   endTime: _selectedSlot!.add(Duration(minutes: _slotDuration)),
-                  remark: "",
+                  type: 'Washer', // EXPLICIT TYPE
                 );
                 widget.onSave(booking);
               },
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFB97AD9), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFB97AD9), foregroundColor: Colors.white),
               child: const Text("Confirm Reservation"),
             ),
           ),
-          const SizedBox(height: 30),
         ],
       ),
     );

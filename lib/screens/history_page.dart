@@ -8,6 +8,7 @@ class HistoryPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Get the current logged-in user
     final user = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
@@ -24,6 +25,7 @@ class HistoryPage extends StatelessWidget {
             children: [
               _topBar(context),
               const SizedBox(height: 12),
+              // Passing user UID to filter results
               _historyContainer(user?.uid),
             ],
           ),
@@ -44,7 +46,10 @@ class HistoryPage extends StatelessWidget {
           const SizedBox(width: 8),
           const Icon(Icons.history, color: Colors.white),
           const SizedBox(width: 8),
-          const Text("History", style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+          const Text(
+            "History",
+            style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+          ),
         ],
       ),
     );
@@ -53,6 +58,7 @@ class HistoryPage extends StatelessWidget {
   Widget _historyContainer(String? uid) {
     return Expanded(
       child: Container(
+        width: double.infinity,
         padding: const EdgeInsets.all(16),
         decoration: const BoxDecoration(
           color: Colors.white,
@@ -64,39 +70,56 @@ class HistoryPage extends StatelessWidget {
             const Row(
               children: [
                 Icon(Icons.update, color: Colors.purple),
-                SizedBox(width: 8),
-                Text("Usage History", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(width: 8),
+                Text(
+                  "Usage History",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
               ],
             ),
             const SizedBox(height: 16),
             Expanded(
-              child: StreamBuilder<QuerySnapshot>(
-                // 🔹 REAL-TIME LINK: Fetching only this user's history
-                stream: FirebaseFirestore.instance
-                    .collection('usage_history')
-                    .where('userId', isEqualTo: uid) 
-                    .orderBy('time', descending: true)
-                    .snapshots(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                    return const Center(child: Text("No usage records found."));
-                  }
+              child: uid == null
+                  ? const Center(child: Text("User not logged in."))
+                  : StreamBuilder<QuerySnapshot>(
+                      // Listening to the specific user's history
+                      stream: FirebaseFirestore.instance
+                          .collection('usage_history')
+                          .where('userId', isEqualTo: uid)
+                          .orderBy('time', descending: true)
+                          .snapshots(),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return const Center(child: CircularProgressIndicator());
+                        }
+                        if (snapshot.hasError) {
+                          return Center(child: Text("Error: ${snapshot.error}"));
+                        }
+                        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                          return const Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.history_toggle_off, size: 60, color: Colors.grey),
+                                SizedBox(height: 10),
+                                Text("No usage records found.", style: TextStyle(color: Colors.grey)),
+                              ],
+                            ),
+                          );
+                        }
 
-                  final docs = snapshot.data!.docs;
+                        final docs = snapshot.data!.docs;
 
-                  return ListView.separated(
-                    itemCount: docs.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
-                    itemBuilder: (context, index) {
-                      final data = docs[index].data() as Map<String, dynamic>;
-                      return _historyCard(data);
-                    },
-                  );
-                },
-              ),
+                        return ListView.separated(
+                          itemCount: docs.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 12),
+                          itemBuilder: (context, index) {
+                            final data = docs[index].data() as Map<String, dynamic>;
+                            return _historyCard(data);
+                          },
+                        );
+                      },
+                    ),
             ),
           ],
         ),
@@ -105,17 +128,45 @@ class HistoryPage extends StatelessWidget {
   }
 
   Widget _historyCard(Map<String, dynamic> item) {
-    final isWasher = item['type'] == "Washer";
-    // Handling Firestore Timestamp to DateTime
-    final DateTime dateTime = (item['time'] as Timestamp).toDate();
+    final bool isWasher = item['type'] == "Washer";
+
+    // Convert Firestore Timestamp to DateTime safely
+    DateTime dateTime;
+    if (item['time'] is Timestamp) {
+      dateTime = (item['time'] as Timestamp).toDate();
+    } else {
+      dateTime = DateTime.now();
+    }
+
     final date = DateFormat("yyyy-MM-dd").format(dateTime);
     final time = DateFormat("HH:mm").format(dateTime);
+
+    // Dynamic Status Styling
+    String status = item['status'] ?? "Completed";
+    Color statusBgColor = Colors.green.shade50;
+    Color statusTextColor = Colors.green;
+
+    if (status == "In Progress") {
+      statusBgColor = Colors.blue.shade50;
+      statusTextColor = Colors.blue;
+    } else if (status == "Pending") {
+      statusBgColor = Colors.orange.shade50;
+      statusTextColor = Colors.orange;
+    }
 
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.purple.shade100),
+        color: Colors.white,
+        border: Border.all(color: Colors.purple.shade50),
         borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          )
+        ],
       ),
       child: Row(
         children: [
@@ -125,15 +176,21 @@ class HistoryPage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text("${item['type']} #${item['no']}", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                Text(
+                  "${item['type']} #${item['no']}",
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(height: 4),
-                Text("$date  $time", style: const TextStyle(color: Colors.purple)),
+                Text("$date  $time", style: const TextStyle(color: Colors.purple, fontSize: 13)),
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    const Icon(Icons.timer, size: 14, color: Colors.purple),
+                    const Icon(Icons.timer_outlined, size: 14, color: Colors.grey),
                     const SizedBox(width: 4),
-                    Text("${item['duration']} minutes"),
+                    Text(
+                      "${item['duration'] ?? 30} mins",
+                      style: const TextStyle(color: Colors.grey, fontSize: 13),
+                    ),
                   ],
                 ),
               ],
@@ -142,19 +199,22 @@ class HistoryPage extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text("RM ${(item['price'] ?? 0.0).toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              Text(
+                "RM ${(item['price'] ?? 0.0).toStringAsFixed(2)}",
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87),
+              ),
               const SizedBox(height: 6),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: item['status'] == "Completed" ? Colors.green.shade100 : Colors.orange.shade100,
+                  color: statusBgColor,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  item['status'] ?? "Pending",
+                  status,
                   style: TextStyle(
-                    color: item['status'] == "Completed" ? Colors.green : Colors.orange,
-                    fontSize: 12,
+                    color: statusTextColor,
+                    fontSize: 11,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -171,12 +231,13 @@ class HistoryPage extends StatelessWidget {
       width: 48,
       height: 48,
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: isWasher ? [const Color(0xFF9B59B6), const Color(0xFFB97AD9)] : [const Color(0xFFB97AD9), const Color(0xFFD8B4F8)],
-        ),
+        color: isWasher ? const Color(0xFFF3E5F5) : const Color(0xFFE3F2FD),
         borderRadius: BorderRadius.circular(14),
       ),
-      child: Icon(isWasher ? Icons.local_laundry_service : Icons.dry, color: Colors.white),
+      child: Icon(
+        isWasher ? Icons.local_laundry_service : Icons.dry,
+        color: isWasher ? Colors.purple : Colors.blue,
+      ),
     );
   }
 }

@@ -27,24 +27,6 @@ class NavItem {
   });
 }
 
-Future<void> bookMachine(String docId) async {
-  final ref = FirebaseFirestore.instance.collection('machines').doc(docId);
-
-  await FirebaseFirestore.instance.runTransaction((transaction) async {
-    final snapshot = await transaction.get(ref);
-
-    if (!snapshot.exists) return;
-
-    int available = snapshot['available'];
-
-    if (available > 0) {
-      transaction.update(ref, {
-        'available': available - 1,
-      });
-    }
-  });
-}
-
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -107,7 +89,7 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
-          gradient: const LinearGradient(
+          gradient: LinearGradient(
             colors: [Color(0xFFB388FF), Color(0xFFE1BEE7)],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
@@ -121,9 +103,9 @@ class _HomePageState extends State<HomePage> {
               Transform.translate(
                 offset: const Offset(0, -6),
                 child: _userCard(user!),
-              ), // Original welcome user layout
+              ), 
               const SizedBox(height: 16),
-              _stats(user!), // 2 Equal sized boxes (Uses & Balance)
+              _stats(user!), 
               const SizedBox(height: 20),
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 16),
@@ -141,18 +123,20 @@ class _HomePageState extends State<HomePage> {
               ),
               const SizedBox(height: 12),
               
-              // RESTORED: Single bar layout for navigation to sub-pages
+              // WASHER BAR: Now dynamic based on 'washers' collection
               _machineBar(
                 title: "Washer",
-                docId: "washer",
+                collectionPath: "washers",
                 icon: Icons.local_laundry_service,
                 color: const Color(0xFF9B59B6),
                 onTap: () => _navigateTo(const WasherPage()),
               ),
               const SizedBox(height: 12),
+              
+              // DRYER BAR: Now dynamic based on 'dryers' collection (Will show 5 of 5)
               _machineBar(
                 title: "Dryer",
-                docId: "dryer",
+                collectionPath: "dryers",
                 icon: Icons.dry,
                 color: const Color(0xFFB97AD9),
                 onTap: () => _navigateTo(const DryerPage()),
@@ -167,25 +151,20 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // --- TOP BAR ---
   Widget _topBar(BuildContext context) {
     return Container(
-      height: 52, // controlled, premium header height
+      height: 52,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Logo
           Image.asset(
             "assets/icons/logoWashSync.png",
             height: 52,
             width: 52,
             fit: BoxFit.contain,
           ),
-
           const SizedBox(width: 12),
-
-          // App name
           const Text(
             "WashSync",
             style: TextStyle(
@@ -201,7 +180,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // --- USER CARD ---
   Widget _userCard(User user) {
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
@@ -214,10 +192,7 @@ class _HomePageState extends State<HomePage> {
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [
-                  Color(0xFFA500FF),
-                  Color(0xFF7A00CC),
-                ],
+                colors: [Color(0xFFA500FF), Color(0xFF7A00CC)],
               ),
               borderRadius: BorderRadius.circular(18),
               boxShadow: [
@@ -235,18 +210,11 @@ class _HomePageState extends State<HomePage> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text("Hello~~~",
-                      style: TextStyle(color: Colors.white70, fontSize: 14)),
-
+                    const Text("Hello!~~~", style: TextStyle(color: Colors.white70, fontSize: 14)),
                     Text(
                       data['username'] ?? "User",
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
                     ),
-
                     Text(
                       data['email'] ?? "",
                       style: const TextStyle(color: Colors.white70, fontSize: 14),
@@ -261,73 +229,109 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // --- STATS (2 Equal Boxes, No Vouchers) ---
   Widget _stats(User user) {
-    return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData || !snapshot.data!.exists) return const SizedBox();
-        final data = snapshot.data!.data() as Map<String, dynamic>;
-        double balance = (data['balance'] ?? 0.0).toDouble();
-
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            children: [
-              _statCard("${data['totalUses'] ?? 0}", "Total Uses", Icons.show_chart, null),
-              const SizedBox(width: 12),
-              _statCard(
-                "RM ${balance.toStringAsFixed(2)}", 
-                "Balance", 
-                Icons.account_balance_wallet, 
-                () => _navigateTo(const WalletPage(amountToDeduct: -1.0))
-              ),
-            ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('usage_history')
+                  .where('userId', isEqualTo: user.uid)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                String usageCount = "0";
+                if (snapshot.hasData) {
+                  usageCount = snapshot.data!.docs.length.toString();
+                }
+                return _statCard(usageCount, "Total Uses", Icons.show_chart, () {
+                   setState(() => _selectedIndex = 1);
+                   _navigateTo(const HistoryPage());
+                });
+              },
+            ),
           ),
-        );
-      },
+          const SizedBox(width: 12),
+          Expanded(
+            child: StreamBuilder<DocumentSnapshot>(
+              stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
+              builder: (context, snapshot) {
+                double balance = 0.0;
+                if (snapshot.hasData && snapshot.data!.exists) {
+                  final data = snapshot.data!.data() as Map<String, dynamic>;
+                  balance = (data['balance'] ?? 0.0).toDouble();
+                }
+                return _statCard(
+                  "RM ${balance.toStringAsFixed(2)}", 
+                  "Balance", 
+                  Icons.account_balance_wallet, 
+                  () => _navigateTo(const WalletPage(amountToDeduct: -1.0))
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _statCard(String value, String label, IconData icon, VoidCallback? onTap) {
-    return Expanded(
-      child: Material(
-        color: Colors.white,
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      elevation: 6,
+      shadowColor: Colors.black.withOpacity(0.2),
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(16),
-        elevation: 6,
-        shadowColor: Colors.black.withOpacity(0.2),
-        child: InkWell(
-          onTap: onTap,
-          splashColor: Colors.purple.withOpacity(0.15),
-          highlightColor: Colors.purple.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(20),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-            child: Column(
-              children: [
-                Icon(icon, color: Colors.purple, size: 34),
-                const SizedBox(height: 8),
-                Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                Text(label, style: const TextStyle(color: Colors.purple, fontSize: 12, fontWeight: FontWeight.w500)),
-              ],
-            ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+          child: Column(
+            children: [
+              Icon(icon, color: Colors.purple, size: 34),
+              const SizedBox(height: 8),
+              Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text(label, style: const TextStyle(color: Colors.purple, fontSize: 12, fontWeight: FontWeight.w500)),
+            ],
           ),
         ),
       ),
     );
   }
 
-  // --- MACHINE BAR (Original Bar Design) ---
-  Widget _machineBar({required String title, required String docId, required IconData icon, required Color color, required VoidCallback onTap}) {
-    return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('machines').doc(docId).snapshots(),
+  // FIXED: Now uses collection snapshots to determine total and available counts
+  Widget _machineBar({
+    required String title, 
+    required String collectionPath, 
+    required IconData icon, 
+    required Color color, 
+    required VoidCallback onTap
+  }) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection(collectionPath).snapshots(),
       builder: (context, snapshot) {
-        int available = 0, total = 0;
-        if (snapshot.hasData && snapshot.data!.exists) {
-          final data = snapshot.data!.data() as Map<String, dynamic>;
-          available = data['available'] ?? 0;
-          total = data['total'] ?? 0;
+        int total = 0;
+        int available = 0;
+
+        if (snapshot.hasData) {
+          final docs = snapshot.data!.docs;
+          total = docs.length; // Dynamic total (e.g., will show 5 for Washers and Dryers)
+
+          // Availability Logic: Check if machine is NOT currently running a cycle
+          available = docs.where((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            final endTimeStr = data['endTime'];
+            if (endTimeStr == null || endTimeStr == "") return true;
+            
+            try {
+              return DateTime.now().isAfter(DateTime.parse(endTimeStr));
+            } catch (e) {
+              return true;
+            }
+          }).length;
         }
+
         return Container(
           margin: const EdgeInsets.symmetric(horizontal: 16),
           padding: const EdgeInsets.all(16),
@@ -358,14 +362,7 @@ class _HomePageState extends State<HomePage> {
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   elevation: 0,
                 ),
-                child: const Text(
-                  "View",
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    letterSpacing: 0.5,
-                  ),
-                ),
+                child: const Text("View", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
               ),
             ],
           ),
@@ -374,7 +371,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // --- BOTTOM NAV (Original Style) ---
   Widget _bottomNav(List<NavItem> items) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
@@ -384,19 +380,12 @@ class _HomePageState extends State<HomePage> {
           color: Colors.white.withOpacity(0.85),
           borderRadius: BorderRadius.circular(28),
           boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.12),
-              blurRadius: 20,
-              offset: const Offset(0, -6),
-            ),
+            BoxShadow(color: Colors.black.withOpacity(0.12), blurRadius: 20, offset: const Offset(0, -6)),
           ],
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: List.generate(
-            items.length,
-            (index) => _navItemUI(items[index], index),
-          ),
+          children: List.generate(items.length, (index) => _navItemUI(items[index], index)),
         ),
       ),
     );
@@ -404,31 +393,19 @@ class _HomePageState extends State<HomePage> {
 
   Widget _navItemUI(NavItem item, int index) {
     final bool isActive = _selectedIndex == index;
-
     return GestureDetector(
       onTap: item.onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOut,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: isActive
-          ? Colors.purple.withOpacity(0.12)
-          : Colors.transparent,
+          color: isActive ? Colors.purple.withOpacity(0.12) : Colors.transparent,
           borderRadius: BorderRadius.circular(18),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            AnimatedScale(
-              scale: isActive ? 1.2 : 1.0,
-              duration: const Duration(milliseconds: 250),
-              child: Icon(
-                item.icon,
-                color: isActive ? Colors.purple : Colors.grey,
-                size: 24,
-              ),
-            ),
+            Icon(item.icon, color: isActive ? Colors.purple : Colors.grey, size: 24),
             const SizedBox(height: 4),
             Text(
               item.label,
@@ -438,7 +415,6 @@ class _HomePageState extends State<HomePage> {
                 fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
               ),
             ),
-
           ],
         ),
       ),
