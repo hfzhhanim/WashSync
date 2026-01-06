@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -13,13 +15,56 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   final user = FirebaseAuth.instance.currentUser;
   final picker = ImagePicker();
-
+  
   bool _isEditingName = false;
+  bool _isUploading = false; 
 
   final TextEditingController _usernameController = TextEditingController();
 
+  // 📸 PICK IMAGE FROM GALLERY & UPLOAD TO FIREBASE
+  Future<void> _pickImage() async {
+    final XFile? pickedFile = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 50, // Compressing to save storage space
+    );
 
-  // ✏️ SAVE USERNAME
+    if (pickedFile != null) {
+      setState(() => _isUploading = true);
+
+      try {
+        File imageFile = File(pickedFile.path);
+        
+        // 1. Upload to Firebase Storage
+        Reference ref = FirebaseStorage.instance
+            .ref()
+            .child('user_profiles')
+            .child('${user!.uid}.jpg');
+
+        await ref.putFile(imageFile);
+
+        // 2. Get the Download URL
+        String downloadUrl = await ref.getDownloadURL();
+
+        // 3. Update Firestore with the new URL
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user!.uid)
+            .update({'photoUrl': downloadUrl});
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Profile picture updated! ✅")),
+          );
+        }
+      } catch (e) {
+        debugPrint("Upload Error: $e");
+      } finally {
+        if (mounted) setState(() => _isUploading = false);
+      }
+    }
+  }
+
+  // ✏️ SAVE USERNAME TO FIRESTORE
   Future<void> _saveUsername() async {
     await FirebaseFirestore.instance
         .collection('users')
@@ -31,14 +76,15 @@ class _ProfilePageState extends State<ProfilePage> {
     });
   }
 
-  // 🔐 CHANGE PASSWORD
+  // 🔐 CHANGE PASSWORD (SEND EMAIL)
   Future<void> _changePassword() async {
-    await FirebaseAuth.instance
-        .sendPasswordResetEmail(email: user!.email!);
+    await FirebaseAuth.instance.sendPasswordResetEmail(email: user!.email!);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Password reset email sent ✉️")),
-    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Password reset email sent ✉️")),
+      );
+    }
   }
 
   // 🚪 LOGOUT
@@ -50,13 +96,12 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     if (user == null) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     return Scaffold(
       body: Container(
+        width: double.infinity,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             colors: [Color(0xFFD8B4F8), Color(0xFFC084FC)],
@@ -75,10 +120,10 @@ class _ProfilePageState extends State<ProfilePage> {
                 return const Center(child: CircularProgressIndicator());
               }
 
-              final data =
-                  snapshot.data!.data() as Map<String, dynamic>;
-
-              _usernameController.text = data['username'];
+              final data = snapshot.data!.data() as Map<String, dynamic>;
+              if (!_isEditingName) {
+                _usernameController.text = data['username'] ?? "";
+              }
 
               return Column(
                 children: [
@@ -93,65 +138,61 @@ class _ProfilePageState extends State<ProfilePage> {
 
                   const SizedBox(height: 10),
 
-                  // 👤 PROFILE IMAGE
+                  // 👤 PROFILE IMAGE WITH CAMERA OVERLAY
                   Stack(
+                    alignment: Alignment.bottomRight,
                     children: [
                       CircleAvatar(
-                        radius: 50,
-                        backgroundColor: Colors.purple,
-                        backgroundImage: data['photoUrl'] != null &&
-                                data['photoUrl'] != ""
+                        radius: 60,
+                        backgroundColor: Colors.white24,
+                        backgroundImage: data['photoUrl'] != null && data['photoUrl'] != ""
                             ? NetworkImage(data['photoUrl'])
                             : null,
-                        child: data['photoUrl'] == null ||
-                                data['photoUrl'] == ""
-                            ? const Icon(Icons.person,
-                                size: 50, color: Colors.white)
-                            : null,
+                        child: _isUploading 
+                            ? const CircularProgressIndicator(color: Colors.white)
+                            : (data['photoUrl'] == null || data['photoUrl'] == ""
+                                ? const Icon(Icons.person, size: 60, color: Colors.white)
+                                : null),
                       ),
-                      Positioned(
-                        bottom: 0,
-                        right: 0,
-                        child: GestureDetector(
-                          child: Container(
-                            padding: const EdgeInsets.all(6),
-                            /*decoration: const BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.white,
-                            )*/
+                      GestureDetector(
+                        onTap: _pickImage,
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
                           ),
+                          child: const Icon(Icons.camera_alt, color: Colors.purple, size: 20),
                         ),
                       ),
                     ],
                   ),
 
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 15),
 
-                  // ✏️ USERNAME
+                  // ✏️ EDITABLE USERNAME
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       _isEditingName
                           ? SizedBox(
-                              width: 160,
+                              width: 180,
                               child: TextField(
                                 controller: _usernameController,
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(
                                   color: Colors.white,
-                                  fontSize: 20,
+                                  fontSize: 22,
                                   fontWeight: FontWeight.bold,
                                 ),
-                                decoration: const InputDecoration(
-                                  border: InputBorder.none,
-                                ),
+                                decoration: const InputDecoration(border: InputBorder.none),
                               ),
                             )
                           : Text(
-                              data['username'],
+                              data['username'] ?? "Guest",
                               style: const TextStyle(
                                 color: Colors.white,
-                                fontSize: 20,
+                                fontSize: 22,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -159,23 +200,21 @@ class _ProfilePageState extends State<ProfilePage> {
                         icon: Icon(
                           _isEditingName ? Icons.check : Icons.edit,
                           color: Colors.white,
-                          size: 20,
                         ),
-                        onPressed:
-                            _isEditingName ? _saveUsername : () {
-                              setState(() => _isEditingName = true);
-                            },
+                        onPressed: _isEditingName ? _saveUsername : () => setState(() => _isEditingName = true),
                       ),
                     ],
                   ),
 
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 30),
 
-                  _infoCard("Email", data['email']),
+                  // 📋 INFO CARDS
+                  _infoCard("Email", data['email'] ?? "No Email"),
                   _infoCard("Role", data['role'] ?? "User"),
 
                   const Spacer(),
 
+                  // 🛠 ACTION BUTTONS
                   _actionButton(
                     icon: Icons.lock_reset,
                     label: "Change Password",
@@ -186,9 +225,10 @@ class _ProfilePageState extends State<ProfilePage> {
                     icon: Icons.logout,
                     label: "Logout",
                     onTap: _logout,
+                    isLogout: true,
                   ),
 
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 30),
                 ],
               );
             },
@@ -198,58 +238,52 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  // --- HELPER WIDGETS ---
+
   Widget _infoCard(String title, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 25, vertical: 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(title, style: const TextStyle(color: Colors.purple, fontWeight: FontWeight.bold)),
+          Text(value, style: const TextStyle(color: Colors.black87)),
+        ],
+      ),
+    );
+  }
+
+  Widget _actionButton({required IconData icon, required String label, required VoidCallback onTap, bool isLogout = false}) {
+    return GestureDetector(
+      onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(16),
+        margin: const EdgeInsets.symmetric(horizontal: 25, vertical: 8),
+        padding: const EdgeInsets.symmetric(vertical: 15),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          color: isLogout ? Colors.redAccent.withOpacity(0.1) : Colors.white,
+          borderRadius: BorderRadius.circular(30),
+          border: isLogout ? Border.all(color: Colors.redAccent) : null,
         ),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(title,
-                style: const TextStyle(
-                    color: Colors.purple,
-                    fontWeight: FontWeight.bold)),
-            Text(value),
+            Icon(icon, color: isLogout ? Colors.redAccent : Colors.purple),
+            const SizedBox(width: 10),
+            Text(
+              label,
+              style: TextStyle(
+                color: isLogout ? Colors.redAccent : Colors.purple,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ],
         ),
       ),
     );
   }
-
-  Widget _actionButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: Colors.purple),
-              const SizedBox(width: 8),
-              Text(label,
-                  style: const TextStyle(
-                      color: Colors.purple,
-                      fontWeight: FontWeight.bold)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
-

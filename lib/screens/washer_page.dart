@@ -90,6 +90,7 @@ class _WasherPageState extends State<WasherPage> {
     super.initState();
     _seedWashers();
     _startAutoCancelCheck();
+    // This timer keeps the "Time Remaining" countdowns accurate every second
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) setState(() {});
     });
@@ -122,6 +123,7 @@ class _WasherPageState extends State<WasherPage> {
         final startTimeString = doc.data()['startTime'];
         if (startTimeString != null) {
           final startTime = DateTime.parse(startTimeString);
+          // Auto-delete if user hasn't confirmed within 1 minute of start time
           if (now.isAfter(startTime.add(const Duration(minutes: 1)))) {
             await _firestore.collection('bookings').doc(doc.id).delete();
           }
@@ -227,6 +229,7 @@ class _WasherPageState extends State<WasherPage> {
             final machines = washerSnapshot.data!.docs.map((doc) => WashingMachine.fromFirestore(doc.data() as Map<String, dynamic>, doc.id)).toList();
 
             return StreamBuilder<QuerySnapshot>(
+              // Real-time listener for bookings tagged as 'Washer'
               stream: _firestore.collection('bookings')
                   .where('type', isEqualTo: 'Washer')
                   .snapshots(),
@@ -236,15 +239,24 @@ class _WasherPageState extends State<WasherPage> {
                     : <Booking>[];
                 
                 DateTime now = DateTime.now();
-                
+                Set<String> displayedMachineIds = {};
+
+                // Filter logic to decide which bookings appear in "My Washer Bookings"
                 final myActiveBookings = allBookings.where((b) {
                   if (b.userName != "You") return false;
+                  if (displayedMachineIds.contains(b.machineId)) return false;
+
                   final machine = machines.firstWhereOrNull((m) => m.id == b.machineId);
                   if (machine == null) return false;
 
+                  // Show if: 1. Cycle is running OR 2. It's a future slot not yet expired
                   bool isRunning = b.isPaid && machine.endTime != null && now.isBefore(machine.endTime!);
                   bool isUpcoming = !b.isPaid && now.isBefore(b.startTime.add(const Duration(minutes: 1)));
-                  return isRunning || isUpcoming;
+                  
+                  bool shouldDisplay = isRunning || isUpcoming;
+                  if (shouldDisplay) displayedMachineIds.add(b.machineId);
+                  
+                  return shouldDisplay;
                 }).toList();
 
                 return ListView(
@@ -272,7 +284,6 @@ class _WasherPageState extends State<WasherPage> {
     );
   }
 
-  // --- BUILD CARDS REMAIN THE SAME ---
   Widget _buildMyBookingCard(Booking booking, WashingMachine machine) {
     DateTime now = DateTime.now();
     bool isCycleRunning = booking.isPaid && machine.endTime != null && now.isBefore(machine.endTime!);
@@ -351,7 +362,7 @@ class _WasherPageState extends State<WasherPage> {
   }
 }
 
-// -------------------- BOOKING MODAL (PAST SLOT FIX) --------------------
+// -------------------- BOOKING MODAL --------------------
 
 class BookingModal extends StatefulWidget {
   final WashingMachine machine;
@@ -385,7 +396,7 @@ class _BookingModalState extends State<BookingModal> {
       DateTime slotStart = runner;
       DateTime slotEnd = runner.add(Duration(minutes: _slotDuration));
 
-      // FIX: If the slot end time is in the past, don't show it
+      // Skip past slots
       if (slotEnd.isBefore(now)) { 
         runner = runner.add(Duration(minutes: _slotDuration)); 
         continue; 
@@ -414,7 +425,13 @@ class _BookingModalState extends State<BookingModal> {
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          Text("Select Slot: ${widget.machine.name}", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text("Select Slot: ${widget.machine.name}", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+            ],
+          ),
           const Divider(),
           Expanded(
             child: ListView.separated(
@@ -437,6 +454,10 @@ class _BookingModalState extends State<BookingModal> {
                       Icon(isTaken ? Icons.block : (isSelected ? Icons.check_circle : Icons.radio_button_unchecked), color: isSelected ? const Color(0xFFB97AD9) : Colors.grey),
                       const SizedBox(width: 12),
                       Text(DateFormat('h:mm a').format(slot['date']), style: const TextStyle(fontWeight: FontWeight.bold)),
+                      if (isTaken) ...[
+                        const Spacer(),
+                        const Text("Reserved", style: TextStyle(color: Colors.red, fontSize: 12)),
+                      ]
                     ]),
                   ),
                 );
@@ -454,12 +475,17 @@ class _BookingModalState extends State<BookingModal> {
                   userName: "You",
                   startTime: _selectedSlot!,
                   endTime: _selectedSlot!.add(Duration(minutes: _slotDuration)),
-                  type: 'Washer', // EXPLICIT TYPE
+                  type: 'Washer', 
                 );
                 widget.onSave(booking);
               },
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFB97AD9), foregroundColor: Colors.white),
-              child: const Text("Confirm Reservation"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFB97AD9), 
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text("Confirm Reservation", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             ),
           ),
         ],

@@ -48,7 +48,8 @@ class HistoryPage extends StatelessWidget {
           const SizedBox(width: 8),
           const Text(
             "History",
-            style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+            style: TextStyle(
+                color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
           ),
         ],
       ),
@@ -70,7 +71,7 @@ class HistoryPage extends StatelessWidget {
             const Row(
               children: [
                 Icon(Icons.update, color: Colors.purple),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 Text(
                   "Usage History",
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -82,7 +83,7 @@ class HistoryPage extends StatelessWidget {
               child: uid == null
                   ? const Center(child: Text("User not logged in."))
                   : StreamBuilder<QuerySnapshot>(
-                      // Listening to the specific user's history
+                      // This fetches everything in 'usage_history' for this user
                       stream: FirebaseFirestore.instance
                           .collection('usage_history')
                           .where('userId', isEqualTo: uid)
@@ -96,16 +97,7 @@ class HistoryPage extends StatelessWidget {
                           return Center(child: Text("Error: ${snapshot.error}"));
                         }
                         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                          return const Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.history_toggle_off, size: 60, color: Colors.grey),
-                                SizedBox(height: 10),
-                                Text("No usage records found.", style: TextStyle(color: Colors.grey)),
-                              ],
-                            ),
-                          );
+                          return _emptyState();
                         }
 
                         final docs = snapshot.data!.docs;
@@ -114,7 +106,8 @@ class HistoryPage extends StatelessWidget {
                           itemCount: docs.length,
                           separatorBuilder: (_, __) => const SizedBox(height: 12),
                           itemBuilder: (context, index) {
-                            final data = docs[index].data() as Map<String, dynamic>;
+                            final data =
+                                docs[index].data() as Map<String, dynamic>;
                             return _historyCard(data);
                           },
                         );
@@ -128,7 +121,9 @@ class HistoryPage extends StatelessWidget {
   }
 
   Widget _historyCard(Map<String, dynamic> item) {
-    final bool isWasher = item['type'] == "Washer";
+    // Detect type - default to Washer if the field is missing
+    final String type = item['type'] ?? "Washer";
+    final bool isWasher = type.toLowerCase() == "washer";
 
     // Convert Firestore Timestamp to DateTime safely
     DateTime dateTime;
@@ -154,11 +149,14 @@ class HistoryPage extends StatelessWidget {
       statusTextColor = Colors.orange;
     }
 
+    // Theme color based on machine type
+    Color themeColor = isWasher ? Colors.purple : Colors.blue;
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border.all(color: Colors.purple.shade50),
+        border: Border.all(color: themeColor.withOpacity(0.1)),
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
@@ -177,18 +175,19 @@ class HistoryPage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  "${item['type']} #${item['no']}",
+                  "$type #${item['no'] ?? '?'}",
                   style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 4),
-                Text("$date  $time", style: const TextStyle(color: Colors.purple, fontSize: 13)),
+                Text("$date  $time",
+                    style: TextStyle(color: themeColor, fontSize: 13)),
                 const SizedBox(height: 4),
                 Row(
                   children: [
                     const Icon(Icons.timer_outlined, size: 14, color: Colors.grey),
                     const SizedBox(width: 4),
                     Text(
-                      "${item['duration'] ?? 30} mins",
+                      "${item['duration'] ?? 0} mins",
                       style: const TextStyle(color: Colors.grey, fontSize: 13),
                     ),
                   ],
@@ -200,8 +199,11 @@ class HistoryPage extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                "RM ${(item['price'] ?? 0.0).toStringAsFixed(2)}",
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87),
+                "RM ${(item['price'] ?? 0.0).toDouble().toStringAsFixed(2)}",
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: Colors.black87),
               ),
               const SizedBox(height: 6),
               Container(
@@ -235,8 +237,22 @@ class HistoryPage extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
       ),
       child: Icon(
-        isWasher ? Icons.local_laundry_service : Icons.dry,
+        isWasher ? Icons.local_laundry_service : Icons.wb_sunny_outlined,
         color: isWasher ? Colors.purple : Colors.blue,
+      ),
+    );
+  }
+
+  Widget _emptyState() {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.history_toggle_off, size: 60, color: Colors.grey),
+          SizedBox(height: 10),
+          Text("No usage records found.",
+              style: TextStyle(color: Colors.grey)),
+        ],
       ),
     );
   }

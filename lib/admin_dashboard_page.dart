@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+// Note: Replace these with your actual imports
+// import 'washer_page.dart';
+// import 'dryer_page.dart';
+
 class AdminDashboardPage extends StatefulWidget {
   const AdminDashboardPage({super.key});
 
@@ -22,7 +26,6 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
   Future<void> fetchAdminName() async {
     try {
       final user = FirebaseAuth.instance.currentUser;
-
       if (user == null) {
         setState(() => isLoading = false);
         return;
@@ -39,13 +42,22 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
           isLoading = false;
         });
       } else {
-        // Admin doc not found
         setState(() => isLoading = false);
       }
     } catch (e) {
       debugPrint("Error fetching admin name: $e");
       setState(() => isLoading = false);
     }
+  }
+
+  /// Navigation Helper
+  void _navigateToCategory(String status) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => MachineListPage(filterStatus: status),
+      ),
+    );
   }
 
   @override
@@ -79,10 +91,10 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                 mainAxisSpacing: 20,
                 childAspectRatio: 1.3,
                 children: [
-                  _buildSquare('Total Machines', '10'),
-                  _buildSquare('Available', '4'),
-                  _buildSquare('In Use', '5'),
-                  _buildSquare('Maintenance', '1'),
+                  _buildSquare('Total Machines', '10', onTap: () => _navigateToCategory('All')),
+                  _buildSquare('Available', '4', onTap: () => _navigateToCategory('Available')),
+                  _buildSquare('In Use', '5', onTap: () => _navigateToCategory('In Use')),
+                  _buildSquare('Maintenance', '1', onTap: () => _navigateToCategory('Maintenance')),
                 ],
               ),
 
@@ -130,9 +142,10 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
           DataColumn(label: Text('Last Update', style: TextStyle(fontWeight: FontWeight.bold))),
         ],
         rows: List.generate(5, (index) {
+          final type = index.isEven ? 'Washer' : 'Dryer';
           return DataRow(
             cells: [
-              DataCell(Text(index.isEven ? 'Washer' : 'Dryer')),
+              DataCell(Text(type)),
               DataCell(Text('${index + 1}')),
               DataCell(_buildStatusBadge(index)),
               const DataCell(Text('10:45 AM')),
@@ -171,40 +184,61 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
     );
   }
 
-  /// 🟣 SUMMARY CARD
-  Widget _buildSquare(String title, String value) {
-    return Container(
-      decoration: BoxDecoration(
+  /// 🟣 SUMMARY CARD (Updated with InkWell for Ripple Effect)
+  Widget _buildSquare(String title, String value, {VoidCallback? onTap}) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(20),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFFE292FE), Color(0xFFBD61FF)],
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFFE292FE), Color(0xFFBD61FF)],
+            ),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                value,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
+    );
+  }
+}
+
+/// --- Placeholder for the Detail Page ---
+class MachineListPage extends StatelessWidget {
+  final String filterStatus;
+  const MachineListPage({super.key, required this.filterStatus});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('$filterStatus Machines')),
+      body: Center(child: Text('Displaying all $filterStatus machines here.')),
     );
   }
 }
