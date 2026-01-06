@@ -25,6 +25,7 @@ dependencies:
   flutter_local_notifications: ^17.2.1 
   timezone: ^0.9.4
   intl: ^0.19.0            # Crucial for Date/Time formatting in History
+  permission_handler: ^11.3.1  
 
   # --- UI & Utilities ---
   cupertino_icons: ^1.0.8

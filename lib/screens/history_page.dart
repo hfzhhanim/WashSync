@@ -4,11 +4,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class HistoryPage extends StatelessWidget {
-  const HistoryPage({super.key});
+  final String? filterType; // Optional: "Dryer" or "Washer"
+
+  const HistoryPage({super.key, this.filterType});
 
   @override
   Widget build(BuildContext context) {
-    // Get the current logged-in user
     final user = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
@@ -25,7 +26,6 @@ class HistoryPage extends StatelessWidget {
             children: [
               _topBar(context),
               const SizedBox(height: 12),
-              // Passing user UID to filter results
               _historyContainer(user?.uid),
             ],
           ),
@@ -46,9 +46,9 @@ class HistoryPage extends StatelessWidget {
           const SizedBox(width: 8),
           const Icon(Icons.history, color: Colors.white),
           const SizedBox(width: 8),
-          const Text(
-            "History",
-            style: TextStyle(
+          Text(
+            filterType == null ? "Usage History" : "$filterType History",
+            style: const TextStyle(
                 color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
           ),
         ],
@@ -68,27 +68,22 @@ class HistoryPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(Icons.update, color: Colors.purple),
-                SizedBox(width: 8),
+                const Icon(Icons.update, color: Colors.purple),
+                const SizedBox(width: 8),
                 Text(
-                  "Usage History",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  filterType == null ? "Recent Activity" : "Recent $filterType Activity",
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
             const SizedBox(height: 16),
             Expanded(
               child: uid == null
-                  ? const Center(child: Text("User not logged in."))
+                  ? const Center(child: Text("Please log in to view history."))
                   : StreamBuilder<QuerySnapshot>(
-                      // This fetches everything in 'usage_history' for this user
-                      stream: FirebaseFirestore.instance
-                          .collection('usage_history')
-                          .where('userId', isEqualTo: uid)
-                          .orderBy('time', descending: true)
-                          .snapshots(),
+                      stream: _getFilteredStream(uid),
                       builder: (context, snapshot) {
                         if (snapshot.connectionState == ConnectionState.waiting) {
                           return const Center(child: CircularProgressIndicator());
@@ -100,15 +95,32 @@ class HistoryPage extends StatelessWidget {
                           return _emptyState();
                         }
 
+                        // Use a Map to ensure unique records (De-duplication)
                         final docs = snapshot.data!.docs;
+                        final Map<String, dynamic> uniqueRecords = {};
+
+                        for (var doc in docs) {
+                          final data = doc.data() as Map<String, dynamic>;
+                          final timestamp = data['time'] as Timestamp?;
+                          final machineNo = data['no'] ?? '0';
+                          final type = data['type'] ?? 'Unknown';
+                          
+                          if (timestamp != null) {
+                            // Unique key: type + machine number + specific minute
+                            String key = "${type}_${machineNo}_${timestamp.seconds ~/ 60}";
+                            if (!uniqueRecords.containsKey(key)) {
+                              uniqueRecords[key] = data;
+                            }
+                          }
+                        }
+
+                        final filteredList = uniqueRecords.values.toList();
 
                         return ListView.separated(
-                          itemCount: docs.length,
+                          itemCount: filteredList.length,
                           separatorBuilder: (_, __) => const SizedBox(height: 12),
                           itemBuilder: (context, index) {
-                            final data =
-                                docs[index].data() as Map<String, dynamic>;
-                            return _historyCard(data);
+                            return _historyCard(filteredList[index]);
                           },
                         );
                       },
@@ -120,37 +132,37 @@ class HistoryPage extends StatelessWidget {
     );
   }
 
+  // Helper method to build the Firestore Query
+  Stream<QuerySnapshot> _getFilteredStream(String uid) {
+    Query query = FirebaseFirestore.instance
+        .collection('usage_history')
+        .where('userId', isEqualTo: uid);
+
+    // FIX: Apply the type filter only if filterType is provided
+    if (filterType != null) {
+      query = query.where('type', isEqualTo: filterType);
+    }
+
+    return query.orderBy('time', descending: true).snapshots();
+  }
+
   Widget _historyCard(Map<String, dynamic> item) {
-    // Detect type - default to Washer if the field is missing
     final String type = item['type'] ?? "Washer";
     final bool isWasher = type.toLowerCase() == "washer";
+    final bool isDryer = type.toLowerCase() == "dryer";
 
-    // Convert Firestore Timestamp to DateTime safely
-    DateTime dateTime;
-    if (item['time'] is Timestamp) {
-      dateTime = (item['time'] as Timestamp).toDate();
-    } else {
-      dateTime = DateTime.now();
-    }
+    DateTime dateTime = (item['time'] is Timestamp) 
+        ? (item['time'] as Timestamp).toDate() 
+        : DateTime.now();
 
-    final date = DateFormat("yyyy-MM-dd").format(dateTime);
-    final time = DateFormat("HH:mm").format(dateTime);
+    final date = DateFormat("MMM dd, yyyy").format(dateTime);
+    final time = DateFormat("hh:mm a").format(dateTime);
 
-    // Dynamic Status Styling
     String status = item['status'] ?? "Completed";
-    Color statusBgColor = Colors.green.shade50;
-    Color statusTextColor = Colors.green;
+    Color statusTextColor = (status == "In Progress") ? Colors.blue : Colors.green;
+    Color statusBgColor = statusTextColor.withOpacity(0.1);
 
-    if (status == "In Progress") {
-      statusBgColor = Colors.blue.shade50;
-      statusTextColor = Colors.blue;
-    } else if (status == "Pending") {
-      statusBgColor = Colors.orange.shade50;
-      statusTextColor = Colors.orange;
-    }
-
-    // Theme color based on machine type
-    Color themeColor = isWasher ? Colors.purple : Colors.blue;
+    Color themeColor = isWasher ? Colors.purple : (isDryer ? Colors.blue : Colors.blueGrey);
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -159,37 +171,26 @@ class HistoryPage extends StatelessWidget {
         border: Border.all(color: themeColor.withOpacity(0.1)),
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          )
+          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))
         ],
       ),
       child: Row(
         children: [
-          _machineIcon(isWasher),
+          _machineIcon(type),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  "$type #${item['no'] ?? '?'}",
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
+                Text("$type #${item['no'] ?? '?'}", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
-                Text("$date  $time",
-                    style: TextStyle(color: themeColor, fontSize: 13)),
+                Text("$date  •  $time", style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
                 const SizedBox(height: 4),
                 Row(
                   children: [
                     const Icon(Icons.timer_outlined, size: 14, color: Colors.grey),
                     const SizedBox(width: 4),
-                    Text(
-                      "${item['duration'] ?? 0} mins",
-                      style: const TextStyle(color: Colors.grey, fontSize: 13),
-                    ),
+                    Text("${item['duration'] ?? 0} mins", style: const TextStyle(color: Colors.grey, fontSize: 13)),
                   ],
                 ),
               ],
@@ -198,28 +199,13 @@ class HistoryPage extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(
-                "RM ${(item['price'] ?? 0.0).toDouble().toStringAsFixed(2)}",
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: Colors.black87),
-              ),
+              Text("RM ${(item['price'] ?? 0.0).toDouble().toStringAsFixed(2)}", 
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87)),
               const SizedBox(height: 6),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: statusBgColor,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  status,
-                  style: TextStyle(
-                    color: statusTextColor,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                decoration: BoxDecoration(color: statusBgColor, borderRadius: BorderRadius.circular(12)),
+                child: Text(status, style: TextStyle(color: statusTextColor, fontSize: 11, fontWeight: FontWeight.bold)),
               ),
             ],
           ),
@@ -228,17 +214,20 @@ class HistoryPage extends StatelessWidget {
     );
   }
 
-  Widget _machineIcon(bool isWasher) {
+  Widget _machineIcon(String type) {
+    bool isWasher = type.toLowerCase() == "washer";
+    bool isDryer = type.toLowerCase() == "dryer";
+
     return Container(
       width: 48,
       height: 48,
       decoration: BoxDecoration(
-        color: isWasher ? const Color(0xFFF3E5F5) : const Color(0xFFE3F2FD),
+        color: isWasher ? const Color(0xFFF3E5F5) : (isDryer ? const Color(0xFFE3F2FD) : Colors.grey.shade100),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Icon(
-        isWasher ? Icons.local_laundry_service : Icons.wb_sunny_outlined,
-        color: isWasher ? Colors.purple : Colors.blue,
+        isWasher ? Icons.local_laundry_service : (isDryer ? Icons.wb_sunny_outlined : Icons.help_outline),
+        color: isWasher ? Colors.purple : (isDryer ? Colors.blue : Colors.grey),
       ),
     );
   }
@@ -250,8 +239,8 @@ class HistoryPage extends StatelessWidget {
         children: [
           Icon(Icons.history_toggle_off, size: 60, color: Colors.grey),
           SizedBox(height: 10),
-          Text("No usage records found.",
-              style: TextStyle(color: Colors.grey)),
+          Text("No records found.", style: TextStyle(color: Colors.grey, fontSize: 16)),
+          Text("Book a machine to see your history.", style: TextStyle(color: Colors.grey, fontSize: 12)),
         ],
       ),
     );
