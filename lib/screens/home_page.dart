@@ -6,7 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'sign_in_page.dart';
 import 'report_page.dart';           
 import 'feedback_rating_page.dart';   
-import 'history_page.dart';
+import 'history_page.dart'; // Ensure this file DOES NOT contain a second DryerPage or WasherPage class
 
 // YOUR Wallet & Payment Pages
 import 'wallet_page.dart';
@@ -38,6 +38,7 @@ class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
   User? get user => FirebaseAuth.instance.currentUser;
 
+  // REMOVED 'const' from navigation logic to fix "Not a constant expression" error
   void _navigateTo(Widget page) {
     Navigator.push(
       context,
@@ -57,7 +58,7 @@ class _HomePageState extends State<HomePage> {
         label: "Profile",
         onTap: () {
           setState(() => _selectedIndex = 0);
-          _navigateTo(const ProfilePage());
+          _navigateTo(ProfilePage()); // Removed const
         },
       ),
       NavItem(
@@ -65,7 +66,7 @@ class _HomePageState extends State<HomePage> {
         label: "History",
         onTap: () {
           setState(() => _selectedIndex = 1);
-          _navigateTo(const HistoryPage());
+          _navigateTo(HistoryPage()); // Removed const
         },
       ),
       NavItem(
@@ -123,23 +124,23 @@ class _HomePageState extends State<HomePage> {
               ),
               const SizedBox(height: 12),
               
-              // WASHER BAR: Now dynamic based on 'washers' collection
+              // WASHER BAR
               _machineBar(
                 title: "Washer",
                 collectionPath: "washers",
                 icon: Icons.local_laundry_service,
                 color: const Color(0xFF9B59B6),
-                onTap: () => _navigateTo(const WasherPage()),
+                onTap: () => _navigateTo(WasherPage()), // Removed const
               ),
               const SizedBox(height: 12),
               
-              // DRYER BAR: Now dynamic based on 'dryers' collection (Will show 5 of 5)
+              // DRYER BAR
               _machineBar(
                 title: "Dryer",
                 collectionPath: "dryers",
                 icon: Icons.dry,
                 color: const Color(0xFFB97AD9),
-                onTap: () => _navigateTo(const DryerPage()),
+                onTap: () => _navigateTo(DryerPage()), // Removed const
               ),
               
               const Spacer(),
@@ -170,9 +171,7 @@ class _HomePageState extends State<HomePage> {
             style: TextStyle(
               color: Colors.white,
               fontSize: 22,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.3,
-              height: 1.0,
+              fontWeight: FontWeight.bold,
             ),
           ),
         ],
@@ -246,8 +245,8 @@ class _HomePageState extends State<HomePage> {
                   usageCount = snapshot.data!.docs.length.toString();
                 }
                 return _statCard(usageCount, "Total Uses", Icons.show_chart, () {
-                   setState(() => _selectedIndex = 1);
-                   _navigateTo(const HistoryPage());
+                    setState(() => _selectedIndex = 1);
+                    _navigateTo(HistoryPage()); // Removed const
                 });
               },
             ),
@@ -266,7 +265,7 @@ class _HomePageState extends State<HomePage> {
                   "RM ${balance.toStringAsFixed(2)}", 
                   "Balance", 
                   Icons.account_balance_wallet, 
-                  () => _navigateTo(const WalletPage(amountToDeduct: -1.0))
+                  () => _navigateTo(WalletPage(amountToDeduct: -1.0)) // Removed const
                 );
               },
             ),
@@ -281,7 +280,6 @@ class _HomePageState extends State<HomePage> {
       color: Colors.white,
       borderRadius: BorderRadius.circular(16),
       elevation: 6,
-      shadowColor: Colors.black.withOpacity(0.2),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
@@ -300,7 +298,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // FIXED: Now uses collection snapshots to determine total and available counts
   Widget _machineBar({
     required String title, 
     required String collectionPath, 
@@ -316,19 +313,46 @@ class _HomePageState extends State<HomePage> {
 
         if (snapshot.hasData) {
           final docs = snapshot.data!.docs;
-          total = docs.length; // Dynamic total (e.g., will show 5 for Washers and Dryers)
+          total = docs.length;
 
-          // Availability Logic: Check if machine is NOT currently running a cycle
           available = docs.where((doc) {
             final data = doc.data() as Map<String, dynamic>;
-            final endTimeStr = data['endTime'];
-            if (endTimeStr == null || endTimeStr == "") return true;
             
-            try {
-              return DateTime.now().isAfter(DateTime.parse(endTimeStr));
-            } catch (e) {
-              return true;
+            // 1. CHECK MAINTENANCE STATUS
+            bool isUnderMaintenance = false;
+            if (data['maintenanceUntil'] != null && data['maintenanceUntil'] != "") {
+              try {
+                DateTime endMaintenance = DateTime.parse(data['maintenanceUntil']);
+                // End of day threshold (23:59:59)
+                DateTime expiryPoint = DateTime(
+                  endMaintenance.year, 
+                  endMaintenance.month, 
+                  endMaintenance.day, 
+                  23, 59, 59
+                );
+                if (DateTime.now().isBefore(expiryPoint)) {
+                  isUnderMaintenance = true;
+                }
+              } catch (e) {
+                isUnderMaintenance = false;
+              }
             }
+
+            // 2. CHECK IN-USE STATUS (endTime)
+            bool isInUse = false;
+            final endTimeStr = data['endTime'];
+            if (endTimeStr != null && endTimeStr != "") {
+              try {
+                if (DateTime.now().isBefore(DateTime.parse(endTimeStr))) {
+                  isInUse = true;
+                }
+              } catch (e) {
+                isInUse = false;
+              }
+            }
+
+            // A machine is ONLY available if it is NOT in use AND NOT under maintenance
+            return !isInUse && !isUnderMaintenance;
           }).length;
         }
 
@@ -338,7 +362,6 @@ class _HomePageState extends State<HomePage> {
           decoration: BoxDecoration(
             color: color, 
             borderRadius: BorderRadius.circular(20),
-            boxShadow: [BoxShadow(color: color.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))],
           ),
           child: Row(
             children: [
@@ -359,8 +382,6 @@ class _HomePageState extends State<HomePage> {
                   backgroundColor: Colors.white,
                   foregroundColor: color,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  elevation: 0,
                 ),
                 child: const Text("View", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
               ),

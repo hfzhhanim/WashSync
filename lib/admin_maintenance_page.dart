@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart'; // Required for DateFormat
+import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AdminMaintenancePage extends StatefulWidget {
   const AdminMaintenancePage({super.key});
@@ -9,228 +10,312 @@ class AdminMaintenancePage extends StatefulWidget {
 }
 
 class _AdminMaintenancePageState extends State<AdminMaintenancePage> {
-  // 1. DATA AND STATE
-  int? _selectedMachineIndex; 
+  int? _selectedMachineIndex;
   final _formKey = GlobalKey<FormState>();
   
+  // Controllers for the form fields
   final TextEditingController _startDateController = TextEditingController();
   final TextEditingController _endDateController = TextEditingController();
-  final TextEditingController _notesController = TextEditingController();
-  String? _selectedIssue;
+  final TextEditingController _descriptionController = TextEditingController();
+  
+  bool _isLoading = true;
 
-  // Initial Mock Data
+  // Local machine list
   final List<Map<String, dynamic>> _machines = [
-    {'type': 'Washer', 'no': 1, 'status': 'Available', 'next': '2025-01-10', 'issue': '', 'start': '', 'end': '', 'notes': ''},
-    {'type': 'Dryer', 'no': 1, 'status': 'Maintenance', 'next': '2025-01-05', 'issue': 'Water leakage', 'start': '2025-01-01', 'end': '2025-01-06', 'notes': 'Replacing the main pipe.'},
-    {'type': 'Washer', 'no': 2, 'status': 'Available', 'next': '2025-01-12', 'issue': '', 'start': '', 'end': '', 'notes': ''},
+    {'type': 'Washer', 'no': 1, 'isScheduled': false},
+    {'type': 'Washer', 'no': 2, 'isScheduled': false},
+    {'type': 'Washer', 'no': 3, 'isScheduled': false},
+    {'type': 'Washer', 'no': 4, 'isScheduled': false},
+    {'type': 'Washer', 'no': 5, 'isScheduled': false},
+    {'type': 'Dryer', 'no': 1, 'isScheduled': false},
+    {'type': 'Dryer', 'no': 2, 'isScheduled': false},
+    {'type': 'Dryer', 'no': 3, 'isScheduled': false},
+    {'type': 'Dryer', 'no': 4, 'isScheduled': false},
+    {'type': 'Dryer', 'no': 5, 'isScheduled': false},
   ];
 
-  final List<String> _issueTypes = [
-    'Machine not turning on', 'Water leakage', 'Drum not spinning / drum stuck',
-    'Excessive vibration during operation', 'Unusual or loud noise', 'Damaging or tearing clothes', 'Other'
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _syncWithFirestore();
+  }
 
-  // FUNCTION TO OPEN CALENDAR POPUP
-  Future<void> _selectDate(BuildContext context, TextEditingController controller) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(2024), 
-      lastDate: DateTime(2030),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Colors.blueAccent, 
-              onPrimary: Colors.white,    
-              onSurface: Colors.black,    
-            ),
-          ),
-          child: child!,
-        );
-      },
-    );
-
-    if (picked != null) {
-      setState(() {
-        // Formats date to YYYY-MM-DD for consistency
-        controller.text = DateFormat('yyyy-MM-dd').format(picked);
-      });
+  // Syncs local list with Firestore on page load
+  Future<void> _syncWithFirestore() async {
+    try {
+      for (var machine in _machines) {
+        String collection = machine['type'] == 'Washer' ? 'washers' : 'dryers';
+        String docId = machine['no'].toString();
+        var doc = await FirebaseFirestore.instance.collection(collection).doc(docId).get();
+        
+        if (doc.exists) {
+          final data = doc.data();
+          if (data != null && data['status'] == 'Maintenance') {
+            setState(() {
+              machine['isScheduled'] = true;
+            });
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Sync error: $e");
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  void _handleAction(int index) {
-    setState(() {
-      _selectedMachineIndex = index;
-      var machine = _machines[index];
-      
-      if (machine['status'] == 'Maintenance') {
-        _selectedIssue = machine['issue'];
-        _startDateController.text = machine['start'];
-        _endDateController.text = machine['end'];
-        _notesController.text = machine['notes'];
-      } else {
-        _selectedIssue = _issueTypes.first;
-        _startDateController.clear();
-        _endDateController.clear();
-        _notesController.clear();
+  // Save or update maintenance info
+  void _saveMaintenance() async {
+    if (_formKey.currentState!.validate() && _selectedMachineIndex != null) {
+      var machine = _machines[_selectedMachineIndex!];
+      String collection = machine['type'] == 'Washer' ? 'washers' : 'dryers';
+      String docId = machine['no'].toString();
+
+      try {
+        await FirebaseFirestore.instance.collection(collection).doc(docId).set({
+          'maintenanceStart': _startDateController.text,
+          'maintenanceUntil': _endDateController.text,
+          'maintenanceDescription': _descriptionController.text,
+          'status': 'Maintenance',
+        }, SetOptions(merge: true));
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Maintenance Details Saved!')),
+        );
+
+        setState(() {
+          _machines[_selectedMachineIndex!]['isScheduled'] = true;
+          _selectedMachineIndex = null;
+          _clearForm();
+        });
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
-    });
+    }
   }
 
-  void _saveMaintenance() {
-    if (_formKey.currentState!.validate()) {
-      setState(() {
-        int index = _selectedMachineIndex!;
-        
-        _machines[index]['status'] = 'Maintenance';
-        _machines[index]['issue'] = _selectedIssue;
-        _machines[index]['start'] = _startDateController.text;
-        _machines[index]['end'] = _endDateController.text;
-        _machines[index]['notes'] = _notesController.text;
-        
-        // UPDATED: Set Next Maintenance to the Start Date
-        _machines[index]['next'] = _startDateController.text;
+  void _clearForm() {
+    _startDateController.clear();
+    _endDateController.clear();
+    _descriptionController.clear();
+  }
 
-        _selectedMachineIndex = null;
-      });
+  // Set machine back to Available
+  void _completeMaintenanceEarly() async {
+    if (_selectedMachineIndex != null) {
+      var machine = _machines[_selectedMachineIndex!];
+      String collection = machine['type'] == 'Washer' ? 'washers' : 'dryers';
+      String docId = machine['no'].toString();
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Maintenance Updated Successfully')),
-      );
+      try {
+        await FirebaseFirestore.instance.collection(collection).doc(docId).update({
+          'maintenanceStart': FieldValue.delete(),
+          'maintenanceUntil': FieldValue.delete(),
+          'maintenanceDescription': FieldValue.delete(),
+          'status': 'Available',
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Machine is now Available!')),
+        );
+
+        setState(() {
+          _machines[_selectedMachineIndex!]['isScheduled'] = false;
+          _selectedMachineIndex = null;
+          _clearForm();
+        });
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 47.0, vertical: 35.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text("Machine Management", style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 20),
-          _buildMachineTable(),
-          const SizedBox(height: 40),
-          if (_selectedMachineIndex != null) _buildSchedulingForm(),
-          const SizedBox(height: 100),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMachineTable() {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      child: SingleChildScrollView(
-  scrollDirection: Axis.horizontal,
-      child: DataTable(
-          columns: const [
-            DataColumn(label: Text('Type', style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text('No.', style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text('Next Maintenance', style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text('Action', style: TextStyle(fontWeight: FontWeight.bold))),
-          ],
-          rows: _machines.asMap().entries.map((entry) {
-            int idx = entry.key;
-            var machine = entry.value;
-            bool isMaint = machine['status'] == 'Maintenance';
-
-            return DataRow(cells: [
-              DataCell(Text(machine['type'])),
-              DataCell(Text(machine['no'].toString())),
-              DataCell(_buildStatusBadge(machine['status'])),
-              DataCell(Text(machine['next'])),
-              DataCell(
-                SizedBox(
-                  width: 120, // 👈 IMPORTANT
-                  child: ElevatedButton(
-                    onPressed: () => _handleAction(idx),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: isMaint ? Colors.orange[800] : Colors.blue[700],
-                      foregroundColor: Colors.white,
-                    ),
-                    child: Text(
-                      isMaint ? 'Update' : 'Schedule',
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
+    return Scaffold(
+      backgroundColor: Colors.grey[50],
+      body: _isLoading 
+        ? const Center(child: CircularProgressIndicator())
+        : SingleChildScrollView(
+            padding: const EdgeInsets.all(30.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Maintenance & Operations',
+                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                 ),
-              ),
-            ]);
-          }).toList(),
-        ),
-      ),
+                const SizedBox(height: 10),
+                Text(
+                  'Set downtime periods and track machine issues.',
+                  style: TextStyle(color: Colors.grey[600]),
+                ),
+                const SizedBox(height: 30),
+
+                _buildTableContainer(),
+
+                const SizedBox(height: 30),
+
+                if (_selectedMachineIndex != null) _buildMaintenanceForm(),
+              ],
+            ),
+          ),
     );
   }
 
-  Widget _buildSchedulingForm() {
-    var machine = _machines[_selectedMachineIndex!];
-    bool isUpdate = machine['status'] == 'Maintenance';
-
+  Widget _buildTableContainer() {
     return Container(
-      width: 900,
-      padding: const EdgeInsets.all(30),
+      width: double.infinity, // Ensures card fills horizontal space
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: isUpdate ? Colors.orange : Colors.blue, width: 2),
         boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
+      ),
+      child: DataTable(
+        headingRowHeight: 60,
+        dataRowMaxHeight: 70,
+        horizontalMargin: 20, // Padding for the left side of table
+        columnSpacing: 0, // We use Expanded in headers to spread columns
+        columns: const [
+          DataColumn(label: Expanded(child: Text('Machine Type', style: TextStyle(fontWeight: FontWeight.bold)))),
+          DataColumn(label: Expanded(child: Text('No.', style: TextStyle(fontWeight: FontWeight.bold)))),
+          DataColumn(label: Expanded(child: Text('Status', style: TextStyle(fontWeight: FontWeight.bold)))),
+          DataColumn(label: Expanded(child: Text('Action', style: TextStyle(fontWeight: FontWeight.bold)))),
+        ],
+        rows: _machines.asMap().entries.map((e) {
+          final machine = e.value;
+          final bool isScheduled = machine['isScheduled'] ?? false;
+
+          return DataRow(cells: [
+            DataCell(Text(machine['type']?.toString() ?? '')), // Left aligned
+            DataCell(Text(machine['no']?.toString() ?? '')),
+            DataCell(_buildStatusBadge(isScheduled ? 'Maintenance' : 'Available')),
+            DataCell(
+              TextButton.icon(
+                icon: Icon(isScheduled ? Icons.edit_note : Icons.calendar_month, size: 18),
+                label: Text(isScheduled ? "Update" : "Schedule"),
+                style: TextButton.styleFrom(
+                  foregroundColor: isScheduled ? Colors.orange[800] : Colors.purple,
+                  padding: EdgeInsets.zero,
+                ),
+                onPressed: () async {
+                  setState(() => _selectedMachineIndex = e.key);
+                  
+                  if (isScheduled) {
+                    // Fetch and fill the form with existing data when updating
+                    var doc = await FirebaseFirestore.instance
+                        .collection(machine['type'] == 'Washer' ? 'washers' : 'dryers')
+                        .doc(machine['no'].toString())
+                        .get();
+                    
+                    if (doc.exists) {
+                      var data = doc.data()!;
+                      setState(() {
+                        _startDateController.text = data['maintenanceStart'] ?? '';
+                        _endDateController.text = data['maintenanceUntil'] ?? '';
+                        _descriptionController.text = data['maintenanceDescription'] ?? '';
+                      });
+                    }
+                  } else {
+                    _clearForm();
+                  }
+                },
+              ),
+            ),
+          ]);
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildMaintenanceForm() {
+    var machine = _machines[_selectedMachineIndex!];
+    bool isScheduled = machine['isScheduled'] ?? false;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(25),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: Colors.purple.shade100, width: 2),
       ),
       child: Form(
         key: _formKey,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text("${isUpdate ? 'Update' : 'Schedule'} Maintenance: ${machine['type']} ${machine['no']}", 
-                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-            const Divider(height: 40),
-            const Text('Issue Type', style: TextStyle(fontWeight: FontWeight.bold)),
-            DropdownButtonFormField<String>(
-              initialValue: _selectedIssue,
-              items: _issueTypes.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-              onChanged: (val) => setState(() => _selectedIssue = val),
-              decoration: const InputDecoration(border: OutlineInputBorder(), filled: true, fillColor: Colors.white),
-            ),
-            const SizedBox(height: 20),
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _buildDateField("Start Date", _startDateController),
-                const SizedBox(width: 20),
-                _buildDateField("End Date", _endDateController),
+                Text(
+                  'Maintenance Form: ${machine['type']} #${machine['no']}',
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                IconButton(
+                  onPressed: () => setState(() {
+                    _selectedMachineIndex = null;
+                    _clearForm();
+                  }), 
+                  icon: const Icon(Icons.close)
+                ),
               ],
             ),
+            const Divider(),
             const SizedBox(height: 20),
-            const Text('Notes', style: TextStyle(fontWeight: FontWeight.bold)),
-            TextFormField(
-              controller: _notesController,
-              maxLines: 3,
-              decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'Enter maintenance details...', filled: true, fillColor: Colors.white),
-            ),
-            const SizedBox(height: 30),
+            
             Row(
               children: [
-                ElevatedButton(
-                  onPressed: _saveMaintenance,
+                Expanded(child: _buildDatePicker(controller: _startDateController, label: "Start Date")),
+                const SizedBox(width: 20),
+                Expanded(child: _buildDatePicker(controller: _endDateController, label: "Estimated End Date")),
+              ],
+            ),
+            
+            const SizedBox(height: 20),
+            
+            TextFormField(
+              controller: _descriptionController,
+              maxLines: 3,
+              decoration: InputDecoration(
+                labelText: "Description / Issues",
+                hintText: "Enter details about the repair needed...",
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                filled: true,
+                fillColor: Colors.grey[50],
+              ),
+              validator: (val) => val == null || val.isEmpty ? 'Please enter a description' : null,
+            ),
+            
+            const SizedBox(height: 30),
+            
+            Row(
+              children: [
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.save),
+                  label: Text(isScheduled ? 'Update Maintenance' : 'Confirm Schedule'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green[700], 
+                    backgroundColor: Colors.purple[600],
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20)
+                    padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 18),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
-                  child: Text(isUpdate ? 'Update Schedule' : 'Save Schedule'),
+                  onPressed: _saveMaintenance,
                 ),
-                const SizedBox(width: 15),
-                OutlinedButton(
-                  onPressed: () => setState(() => _selectedMachineIndex = null), 
-                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20)),
-                  child: const Text('Cancel'),
-                ),
+                if (isScheduled) ...[
+                  const SizedBox(width: 15),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.check_circle),
+                    label: const Text('Mark as Available'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.green[700],
+                      side: BorderSide(color: Colors.green.shade700),
+                      padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 18),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    onPressed: _completeMaintenanceEarly,
+                  ),
+                ],
               ],
             ),
           ],
@@ -239,40 +324,55 @@ class _AdminMaintenancePageState extends State<AdminMaintenancePage> {
     );
   }
 
-  Widget _buildDateField(String label, TextEditingController controller) {
-    return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          TextFormField(
-            controller: controller,
-            readOnly: true, // Prevents manual typing
-            onTap: () => _selectDate(context, controller), // Triggers calendar
-            decoration: const InputDecoration(
-              border: OutlineInputBorder(), 
-              suffixIcon: Icon(Icons.calendar_month), 
-              filled: true, 
-              fillColor: Colors.white,
-              hintText: 'Select Date',
-            ),
-          ),
-        ],
+  // Reusable DatePicker with Calendar Icon
+  Widget _buildDatePicker({required TextEditingController controller, required String label}) {
+    return TextFormField(
+      controller: controller,
+      readOnly: true,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: const Icon(Icons.calendar_month, color: Colors.purple),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+        filled: true,
+        fillColor: Colors.grey[50],
       ),
+      validator: (val) => val == null || val.isEmpty ? 'Pick a date' : null,
+      onTap: () async {
+        DateTime now = DateTime.now();
+        DateTime today = DateTime(now.year, now.month, now.day);
+
+        DateTime? picked = await showDatePicker(
+          context: context,
+          initialDate: today,
+          firstDate: DateTime(today.year - 1),
+          lastDate: DateTime(2030),
+        );
+        if (picked != null) {
+          setState(() {
+            controller.text = DateFormat('yyyy-MM-dd').format(picked);
+          });
+        }
+      },
     );
   }
 
   Widget _buildStatusBadge(String status) {
-    Color color = status == 'Maintenance' ? Colors.orange : (status == 'Available' ? Colors.green : Colors.blue);
+    bool isMaintenace = status == 'Maintenance';
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1), 
-        borderRadius: BorderRadius.circular(10), 
-        border: Border.all(color: color)
+        color: isMaintenace ? Colors.orange[50] : Colors.green[50],
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: isMaintenace ? Colors.orange : Colors.green),
       ),
-      child: Text(status, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12)),
+      child: Text(
+        status.toUpperCase(),
+        style: TextStyle(
+          color: isMaintenace ? Colors.orange[800] : Colors.green[700],
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
     );
   }
 }

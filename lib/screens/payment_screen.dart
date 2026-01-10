@@ -7,14 +7,13 @@ import 'wallet_page.dart';
 import 'success_popup.dart';
 
 class PaymentScreen extends StatefulWidget {
-  // FIXED: Added these parameters to accept data from Washer/Dryer pages
   final String machineType;
   final String machineNo;
 
   const PaymentScreen({
     super.key, 
-    this.machineType = "Washer", 
-    this.machineNo = "1",
+    required this.machineType, 
+    required this.machineNo,
   });
 
   @override
@@ -40,47 +39,87 @@ class _PaymentScreenState extends State<PaymentScreen> {
     return total < 0 ? 0 : total;
   }
 
-  // --- NEW: LOGIC TO ADD RECORD TO USAGE HISTORY ---
+  // --- RECORD USAGE HISTORY (Single Source of Truth) ---
   Future<void> _recordUsageHistory() async {
     if (user == null) return;
-
     try {
       await FirebaseFirestore.instance.collection('usage_history').add({
         'userId': user!.uid,
-        'type': widget.machineType, // e.g. "Washer"
-        'no': widget.machineNo,     // e.g. "5"
-        'time': FieldValue.serverTimestamp(),
-        'duration': 30,             
+        'type': widget.machineType,
+        'no': widget.machineNo,
+        'time': FieldValue.serverTimestamp(), // Used for real-time analytics
+        'duration': 30,
         'price': totalPrice,
-        'status': 'Completed',      
+        'status': 'Completed',
       });
-      print("History record added successfully!");
+      debugPrint("Usage history recorded successfully.");
     } catch (e) {
       debugPrint("Error adding history: $e");
     }
   }
 
-  Widget _walletBalanceDisplay() {
-    return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('users').doc(user?.uid).snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData || !snapshot.data!.exists) {
-          return const Text("Balance: RM 0.00", style: TextStyle(fontSize: 12, color: Colors.grey));
-        }
-        var data = snapshot.data!.data() as Map<String, dynamic>;
-        double currentBalance = (data['balance'] ?? 0.0).toDouble();
-        bool insufficient = currentBalance < totalPrice;
+  // --- FIX: ADDED MISSING HELPER METHOD ---
+  String _paymentMethodName() {
+    switch (selectedMethod) {
+      case 0: return "WashSync Wallet";
+      case 1: return "Online Banking ($selectedBank)";
+      case 2: return "Touch ‘n Go eWallet";
+      default: return "Payment";
+    }
+  }
 
-        return Text(
-          "Balance: RM ${currentBalance.toStringAsFixed(2)}",
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            color: insufficient ? Colors.red : Colors.grey[600],
+  Future<void> processPayment() async {
+    if (selectedMethod == -1) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please select a payment method")));
+      return;
+    }
+
+    bool? success;
+
+    if (selectedMethod == 0) {
+      success = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => WalletPage(amountToDeduct: totalPrice, promoUsed: appliedCode),
+        ),
+      );
+    } else if (selectedMethod == 1) {
+      if (selectedBank == null) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please select a bank")));
+        return;
+      }
+      success = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => OnlineBankingPopup(bankName: selectedBank!, amount: totalPrice),
+      );
+    } else if (selectedMethod == 2) {
+      success = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => TngPopup(amount: totalPrice),
+      );
+    }
+
+    if (success == true) {
+      // ✅ Record usage record only ONCE here
+      await _recordUsageHistory();
+
+      if (mounted) {
+        await showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (popupContext) => SuccessPopup(
+            amount: totalPrice,
+            paymentMethod: _paymentMethodName(), 
+            onOk: () {
+              Navigator.pop(popupContext); 
+              Navigator.pop(context, true); 
+            },
           ),
         );
-      },
-    );
+      }
+    }
   }
 
   Future<void> _applyPromo() async {
@@ -125,67 +164,29 @@ class _PaymentScreenState extends State<PaymentScreen> {
     }
   }
 
-  Future<void> processPayment() async {
-    if (selectedMethod == -1) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please select a payment method")));
-      return;
-    }
+  // --- UI HELPER WIDGETS ---
 
-    bool? success;
+  Widget _walletBalanceDisplay() {
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance.collection('users').doc(user?.uid).snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || !snapshot.data!.exists) {
+          return const Text("Balance: RM 0.00", style: TextStyle(fontSize: 12, color: Colors.grey));
+        }
+        var data = snapshot.data!.data() as Map<String, dynamic>;
+        double currentBalance = (data['balance'] ?? 0.0).toDouble();
+        bool insufficient = currentBalance < totalPrice;
 
-    if (selectedMethod == 0) {
-      success = await Navigator.push<bool>(
-        context,
-        MaterialPageRoute(
-          builder: (_) => WalletPage(amountToDeduct: totalPrice, promoUsed: appliedCode),
-        ),
-      );
-    } else if (selectedMethod == 1) {
-      if (selectedBank == null) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please select a bank")));
-        return;
-      }
-      success = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => OnlineBankingPopup(bankName: selectedBank!, amount: totalPrice),
-      );
-    } else if (selectedMethod == 2) {
-      success = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => TngPopup(amount: totalPrice),
-      );
-    }
-
-    if (success == true) {
-      // --- ADDED: CREATE HISTORY RECORD BEFORE SHOWING SUCCESS POPUP ---
-      await _recordUsageHistory();
-
-      if (mounted) {
-        await showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (popupContext) => SuccessPopup(
-            amount: totalPrice,
-            paymentMethod: _paymentMethodName(),
-            onOk: () {
-              Navigator.pop(popupContext); 
-              Navigator.pop(context, true); 
-            },
+        return Text(
+          "Balance: RM ${currentBalance.toStringAsFixed(2)}",
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: insufficient ? Colors.red : Colors.grey[600],
           ),
         );
-      }
-    }
-  }
-
-  String _paymentMethodName() {
-    switch (selectedMethod) {
-      case 0: return "WashSync Wallet";
-      case 1: return "Online Banking ($selectedBank)";
-      case 2: return "Touch ‘n Go eWallet";
-      default: return "Payment";
-    }
+      },
+    );
   }
 
   Widget paymentCard({required int index, required String title, required IconData icon, required Color iconColor, Widget? extra}) {
@@ -235,6 +236,26 @@ class _PaymentScreenState extends State<PaymentScreen> {
             if (extra != null) extra,
           ],
         ),
+      ),
+    );
+  }
+
+  Widget summaryRow(String label, double value, {bool bold = false, Color? color}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: TextStyle(fontSize: bold ? 18 : 14, fontWeight: bold ? FontWeight.bold : FontWeight.normal)),
+          Text(
+            value < 0 ? "- RM ${value.abs().toStringAsFixed(2)}" : "RM ${value.toStringAsFixed(2)}", 
+            style: TextStyle(
+              fontSize: bold ? 18 : 14, 
+              fontWeight: bold ? FontWeight.bold : FontWeight.w600, 
+              color: color ?? (bold ? const Color(0xFFA500FF) : Colors.black87)
+            )
+          ),
+        ],
       ),
     );
   }
@@ -348,26 +369,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget summaryRow(String label, double value, {bool bold = false, Color? color}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: TextStyle(fontSize: bold ? 18 : 14, fontWeight: bold ? FontWeight.bold : FontWeight.normal)),
-          Text(
-            value < 0 ? "- RM ${value.abs().toStringAsFixed(2)}" : "RM ${value.toStringAsFixed(2)}", 
-            style: TextStyle(
-              fontSize: bold ? 18 : 14, 
-              fontWeight: bold ? FontWeight.bold : FontWeight.w600, 
-              color: color ?? (bold ? const Color(0xFFA500FF) : Colors.black87)
-            )
-          ),
-        ],
       ),
     );
   }

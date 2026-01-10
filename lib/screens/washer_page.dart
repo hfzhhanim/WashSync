@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:collection/collection.dart';
 import 'payment_screen.dart';
+import 'feedback_rating_page.dart'; // Added for the Rate Us link
 
 // -------------------- MODELS --------------------
 
@@ -14,12 +15,14 @@ class WashingMachine {
   final String name;
   DateTime? endTime;
   String? currentRemark;
+  String? maintenanceUntil;
 
   WashingMachine({
     required this.id,
     required this.name,
     this.endTime,
     this.currentRemark,
+    this.maintenanceUntil,
   });
 
   factory WashingMachine.fromFirestore(Map<String, dynamic> data, String id) {
@@ -27,6 +30,7 @@ class WashingMachine {
       id: id,
       name: data['name'] ?? '',
       currentRemark: data['currentRemark'] ?? '',
+      maintenanceUntil: data['maintenanceUntil'],
       endTime: (data['endTime'] != null && data['endTime'] != "")
           ? DateTime.parse(data['endTime'])
           : null,
@@ -38,7 +42,7 @@ class Booking {
   final String id;
   final String machineId;
   final String machineName;
-  final String userId; // TRACKS WHO BOOKED
+  final String userId;
   final String userName;
   final DateTime startTime;
   final DateTime endTime;
@@ -90,6 +94,9 @@ class _WasherPageState extends State<WasherPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
+  // Track popups to prevent duplicates
+  final Set<String> _shownPopups = {};
+
   @override
   void initState() {
     super.initState();
@@ -98,6 +105,58 @@ class _WasherPageState extends State<WasherPage> {
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) setState(() {});
     });
+  }
+
+  // --- UI FUNCTIONS ---
+
+  Widget _buildWasherCard(WashingMachine machine, List<Booking> allBookings) {
+    bool isUnderMaintenance = false;
+    if (machine.maintenanceUntil != null && machine.maintenanceUntil!.isNotEmpty) {
+      try {
+        DateTime endMaintenance = DateTime.parse(machine.maintenanceUntil!);
+        if (DateTime.now().isBefore(endMaintenance.add(const Duration(days: 1)))) {
+          isUnderMaintenance = true;
+        }
+      } catch (e) {
+        debugPrint("Date parse error: $e");
+      }
+    }
+
+    return GestureDetector(
+      onTap: isUnderMaintenance
+          ? () => ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Machine under maintenance. Please choose another.")))
+          : () => showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (c) => BookingModal(machine: machine, existingBookings: allBookings, onSave: _handleSaveBooking),
+              ),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+            color: isUnderMaintenance ? Colors.grey[100] : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: isUnderMaintenance ? Colors.orange : Colors.purple.withOpacity(0.1), width: 1.5)),
+        child: Row(
+          children: [
+            Icon(isUnderMaintenance ? Icons.build_circle : Icons.local_laundry_service, color: isUnderMaintenance ? Colors.orange : Colors.purple, size: 28),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(machine.name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isUnderMaintenance ? Colors.grey[600] : Colors.black)),
+                  if (isUnderMaintenance) Text("Available after: ${machine.maintenanceUntil}", style: const TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+            if (isUnderMaintenance) const Badge(label: Text("OFFLINE"), backgroundColor: Colors.orange),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _seedWashers() async {
@@ -109,6 +168,7 @@ class _WasherPageState extends State<WasherPage> {
           'name': 'Washer $i',
           'endTime': '',
           'currentRemark': '',
+          'maintenanceUntil': '',
         });
       }
     }
@@ -118,11 +178,7 @@ class _WasherPageState extends State<WasherPage> {
     _cleanupTimer = Timer.periodic(const Duration(seconds: 30), (timer) async {
       if (!mounted) return;
       final now = DateTime.now();
-      final snapshot = await _firestore
-          .collection('bookings')
-          .where('type', isEqualTo: 'Washer')
-          .where('isConfirmed', isEqualTo: false)
-          .get();
+      final snapshot = await _firestore.collection('bookings').where('type', isEqualTo: 'Washer').where('isConfirmed', isEqualTo: false).get();
 
       for (var doc in snapshot.docs) {
         final startTimeString = doc.data()['startTime'];
@@ -151,17 +207,14 @@ class _WasherPageState extends State<WasherPage> {
     final bookingRef = _firestore.collection('bookings');
     try {
       await _firestore.runTransaction((transaction) async {
-        QuerySnapshot existing = await bookingRef
-            .where('machineId', isEqualTo: newBooking.machineId)
-            .where('startTime', isEqualTo: newBooking.startTime.toIso8601String())
-            .get();
+        QuerySnapshot existing = await bookingRef.where('machineId', isEqualTo: newBooking.machineId).where('startTime', isEqualTo: newBooking.startTime.toIso8601String()).get();
 
-        if (existing.docs.isNotEmpty) throw Exception("Slot already taken by another user!");
+        if (existing.docs.isNotEmpty) throw Exception("Slot already taken!");
 
         transaction.set(bookingRef.doc(newBooking.id), {
           'machineId': newBooking.machineId,
           'machineName': newBooking.machineName,
-          'userId': user.uid, // SAVE REAL UID
+          'userId': user.uid,
           'userName': user.displayName ?? "User",
           'type': 'Washer',
           'startTime': newBooking.startTime.toIso8601String(),
@@ -171,7 +224,6 @@ class _WasherPageState extends State<WasherPage> {
         });
       });
 
-      // Local Notification only scheduled on User A's device
       DateTime reminderTime = newBooking.startTime.subtract(const Duration(minutes: 5));
       NotificationService.scheduleNotification(
         id: newBooking.id.hashCode,
@@ -211,17 +263,35 @@ class _WasherPageState extends State<WasherPage> {
     await _firestore.collection('bookings').doc(bookingId).update({'isConfirmed': true});
   }
 
+  // --- UPDATED PAYMENT AND START LOGIC ---
+
   Future<void> _handlePayAndStart(Booking booking) async {
-    final bool? success = await Navigator.push(context, MaterialPageRoute(builder: (_) => const PaymentScreen()));
-    
+    final user = FirebaseAuth.instance.currentUser;
+
+    // Security check: Only the owner triggers code
+    if (user?.uid != booking.userId) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Unauthorized")));
+      return;
+    }
+
+    String machineNumber = booking.machineName.replaceAll(RegExp(r'[^0-9]'), '');
+
+    final bool? success = await Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => PaymentScreen(
+                  machineType: "Washer",
+                  machineNo: machineNumber,
+                )));
+
     if (success == true) {
       DateTime washEndTime = DateTime.now().add(const Duration(minutes: 30));
-      final user = _auth.currentUser;
 
       WriteBatch batch = _firestore.batch();
       DocumentReference bookingDoc = _firestore.collection('bookings').doc(booking.id);
       DocumentReference machineDoc = _firestore.collection('washers').doc(booking.machineId);
-      DocumentReference historyDoc = _firestore.collection('usage_history').doc(booking.id);
+
+      // historyDoc removed: PaymentScreen handles history now
 
       batch.update(bookingDoc, {'isPaid': true});
       batch.update(machineDoc, {
@@ -229,32 +299,47 @@ class _WasherPageState extends State<WasherPage> {
         'currentRemark': "In Use",
       });
 
-      batch.set(historyDoc, {
-        'userId': user?.uid,
-        'type': 'Washer',
-        'no': booking.machineName.replaceAll(RegExp(r'[^0-9]'), ''), 
-        'time': FieldValue.serverTimestamp(),
-        'duration': 30,
-        'price': 5.0,
-        'status': 'Completed',
-      });
-
       await batch.commit();
 
       NotificationService.scheduleNotification(
         id: booking.id.hashCode + 1,
         title: "Washer Almost Done!",
-        body: "Your laundry will be finished in 5 minutes.",
+        body: "Your laundry will be ready in 5 minutes.",
         scheduledTime: DateTime.now().add(const Duration(minutes: 25)),
       );
 
       NotificationService.scheduleNotification(
         id: booking.id.hashCode + 2,
         title: "Washer Finished!",
-        body: "Your laundry is done. Please collect it!",
+        body: "Your laundry is done. Please collect it now!",
         scheduledTime: DateTime.now().add(const Duration(minutes: 30)),
       );
     }
+  }
+
+  // --- AUTO RATE US POPUP ---
+
+  void _showRateUsPopup(String machineName) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Center(child: Icon(Icons.stars_rounded, color: Colors.orange, size: 60)),
+        content: Text("$machineName finished! Please collect items and rate us.", textAlign: TextAlign.center),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Later")),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFB97AD9)),
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const FeedbackRatingPage()));
+            },
+            child: const Text("Rate Now", style: TextStyle(color: Colors.white)),
+          )
+        ],
+      ),
+    );
   }
 
   String _formatDuration(Duration d) {
@@ -268,15 +353,9 @@ class _WasherPageState extends State<WasherPage> {
     final String? currentUid = _auth.currentUser?.uid;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("WashSync - Washer", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)), 
-        backgroundColor: const Color(0xFFB97AD9), 
-        centerTitle: true
-      ),
+      appBar: AppBar(title: const Text("WashSync - Washer", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)), backgroundColor: const Color(0xFFB97AD9), centerTitle: true),
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(colors: [Color(0xFFF3E5F5), Colors.white], begin: Alignment.topCenter, end: Alignment.bottomCenter)
-        ),
+        decoration: const BoxDecoration(gradient: LinearGradient(colors: [Color(0xFFF3E5F5), Colors.white], begin: Alignment.topCenter, end: Alignment.bottomCenter)),
         child: StreamBuilder<QuerySnapshot>(
           stream: _firestore.collection('washers').snapshots(),
           builder: (context, washerSnapshot) {
@@ -286,24 +365,20 @@ class _WasherPageState extends State<WasherPage> {
             return StreamBuilder<QuerySnapshot>(
               stream: _firestore.collection('bookings').where('type', isEqualTo: 'Washer').snapshots(),
               builder: (context, bookingSnapshot) {
-                final allBookings = bookingSnapshot.hasData
-                    ? bookingSnapshot.data!.docs.map((doc) => Booking.fromFirestore(doc.data() as Map<String, dynamic>, doc.id)).toList()
-                    : <Booking>[];
-                
+                final allBookings = bookingSnapshot.hasData ? bookingSnapshot.data!.docs.map((doc) => Booking.fromFirestore(doc.data() as Map<String, dynamic>, doc.id)).toList() : <Booking>[];
+
                 DateTime now = DateTime.now();
                 Set<String> displayedMachineIds = {};
 
-                // FILTER: Only show bookings belonging to the LOGGED-IN user
                 final myActiveBookings = allBookings.where((b) {
-                  if (b.userId != currentUid) return false; // This prevents User B from seeing User A's list
-                  
+                  if (b.userId != currentUid) return false;
                   if (displayedMachineIds.contains(b.machineId)) return false;
                   final machine = machines.firstWhereOrNull((m) => m.id == b.machineId);
                   if (machine == null) return false;
 
                   bool isRunning = b.isPaid && machine.endTime != null && now.isBefore(machine.endTime!);
                   bool isUpcoming = !b.isPaid && now.isBefore(b.startTime.add(const Duration(minutes: 5)));
-                  
+
                   if (isRunning || isUpcoming) displayedMachineIds.add(b.machineId);
                   return isRunning || isUpcoming;
                 }).toList();
@@ -334,8 +409,15 @@ class _WasherPageState extends State<WasherPage> {
     DateTime now = DateTime.now();
     bool isCycleRunning = booking.isPaid && machine.endTime != null && now.isBefore(machine.endTime!);
     bool isBeforeSlot = now.isBefore(booking.startTime);
-    bool isConfirmWindow = now.isAfter(booking.startTime.subtract(const Duration(minutes: 5))) && 
-                           now.isBefore(booking.startTime.add(const Duration(minutes: 5)));
+    bool isConfirmWindow = now.isAfter(booking.startTime.subtract(const Duration(minutes: 5))) && now.isBefore(booking.startTime.add(const Duration(minutes: 5)));
+
+    // Auto-popup detection
+    if (booking.isPaid && machine.endTime != null && now.isAfter(machine.endTime!)) {
+      if (!_shownPopups.contains(booking.id)) {
+        _shownPopups.add(booking.id);
+        WidgetsBinding.instance.addPostFrameCallback((_) => _showRateUsPopup(booking.machineName));
+      }
+    }
 
     return Card(
       elevation: 4,
@@ -349,10 +431,7 @@ class _WasherPageState extends State<WasherPage> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(booking.machineName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
-                if (!booking.isPaid) 
-                  IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red), onPressed: () => _handleCancelBooking(booking.id))
-                else
-                  const Icon(Icons.verified, color: Colors.blue, size: 20)
+                if (!booking.isPaid) IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red), onPressed: () => _handleCancelBooking(booking.id)) else const Icon(Icons.verified, color: Colors.blue, size: 20)
               ],
             ),
             const Divider(),
@@ -360,43 +439,19 @@ class _WasherPageState extends State<WasherPage> {
               const Text("Wash Cycle In Progress", style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 16)),
               const SizedBox(height: 12),
               LinearProgressIndicator(
-                value: 1 - (machine.endTime!.difference(now).inSeconds / 1800), 
+                value: 1 - (machine.endTime!.difference(now).inSeconds / 1800),
                 backgroundColor: Colors.blue.withOpacity(0.1),
                 color: Colors.blue,
               ),
               const SizedBox(height: 12),
-              Text("Time Remaining: ${_formatDuration(machine.endTime!.difference(now))}",
-                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.blue, fontFamily: 'monospace')),
+              Text("Time Remaining: ${_formatDuration(machine.endTime!.difference(now))}", style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.blue, fontFamily: 'monospace')),
             ] else if (isBeforeSlot && !isConfirmWindow) ...[
               Text("Starts at ${DateFormat('h:mm a').format(booking.startTime)}", style: const TextStyle(fontSize: 16, color: Colors.grey)),
             ] else if (isConfirmWindow && !booking.isConfirmed) ...[
-               SizedBox(width: double.infinity, child: ElevatedButton.icon(icon: const Icon(Icons.location_on), style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, foregroundColor: Colors.white), onPressed: () => _handleConfirm(booking.id), label: const Text("CONFIRM ARRIVAL"))),
+              SizedBox(width: double.infinity, child: ElevatedButton.icon(icon: const Icon(Icons.location_on), style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, foregroundColor: Colors.white), onPressed: () => _handleConfirm(booking.id), label: const Text("CONFIRM ARRIVAL"))),
             ] else if (booking.isConfirmed && !booking.isPaid) ...[
-               SizedBox(width: double.infinity, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFB97AD9), foregroundColor: Colors.white), onPressed: () => _handlePayAndStart(booking), child: const Text("PAY NOW & START"))),
+              SizedBox(width: double.infinity, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFB97AD9), foregroundColor: Colors.white), onPressed: () => _handlePayAndStart(booking), child: const Text("PAY NOW & START"))),
             ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildWasherCard(WashingMachine machine, List<Booking> allBookings) {
-    return GestureDetector(
-      onTap: () => showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        builder: (c) => BookingModal(machine: machine, existingBookings: allBookings, onSave: _handleSaveBooking),
-      ),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.purple.withOpacity(0.1), width: 1.5)),
-        child: Row(
-          children: [
-            const Icon(Icons.local_laundry_service, color: Colors.purple, size: 28),
-            const SizedBox(width: 16),
-            Expanded(child: Text(machine.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
           ],
         ),
       ),
@@ -404,7 +459,7 @@ class _WasherPageState extends State<WasherPage> {
   }
 }
 
-// -------------------- BOOKING MODAL (PREVENTS USER B OVERLAP) --------------------
+// -------------------- BOOKING MODAL --------------------
 
 class BookingModal extends StatefulWidget {
   final WashingMachine machine;
@@ -439,13 +494,12 @@ class _BookingModalState extends State<BookingModal> {
     while (runner.isBefore(endOfDay)) {
       DateTime slotStart = runner;
       DateTime slotEnd = runner.add(Duration(minutes: _slotDuration));
-      
-      if (slotStart.isBefore(now)) { 
-        runner = runner.add(Duration(minutes: _stepMinutes)); 
-        continue; 
+
+      if (slotStart.isBefore(now)) {
+        runner = runner.add(Duration(minutes: _stepMinutes));
+        continue;
       }
 
-      // Check if ANY user has booked this time
       bool isTaken = widget.existingBookings.any((booking) {
         if (booking.machineId != widget.machine.id) return false;
         return slotStart.isBefore(booking.endTime) && slotEnd.isAfter(booking.startTime);
@@ -507,19 +561,19 @@ class _BookingModalState extends State<BookingModal> {
               onPressed: _selectedSlot == null ? null : () {
                 final user = FirebaseAuth.instance.currentUser;
                 final booking = Booking(
-                  id: DateTime.now().millisecondsSinceEpoch.toString(), 
+                  id: DateTime.now().millisecondsSinceEpoch.toString(),
                   machineId: widget.machine.id,
                   machineName: widget.machine.name,
                   userId: user?.uid ?? 'unknown',
                   userName: user?.displayName ?? 'User',
                   startTime: _selectedSlot!,
                   endTime: _selectedSlot!.add(Duration(minutes: _slotDuration)),
-                  type: 'Washer', 
+                  type: 'Washer',
                 );
                 widget.onSave(booking);
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFB97AD9), 
+                backgroundColor: const Color(0xFFB97AD9),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

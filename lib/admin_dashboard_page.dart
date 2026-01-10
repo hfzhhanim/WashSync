@@ -2,10 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-// Note: Replace these with your actual imports
-// import 'washer_page.dart';
-// import 'dryer_page.dart';
-
 class AdminDashboardPage extends StatefulWidget {
   const AdminDashboardPage({super.key});
 
@@ -27,37 +23,21 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
-        setState(() => isLoading = false);
+        if (mounted) setState(() => isLoading = false);
         return;
       }
-
-      final doc = await FirebaseFirestore.instance
-          .collection('admins')
-          .doc(user.uid)
-          .get();
-
-      if (doc.exists) {
+      final doc = await FirebaseFirestore.instance.collection('admins').doc(user.uid).get();
+      if (doc.exists && mounted) {
         setState(() {
           adminName = doc.data()?['username'] ?? "Admin";
           isLoading = false;
         });
-      } else {
+      } else if (mounted) {
         setState(() => isLoading = false);
       }
     } catch (e) {
-      debugPrint("Error fetching admin name: $e");
-      setState(() => isLoading = false);
+      if (mounted) setState(() => isLoading = false);
     }
-  }
-
-  /// Navigation Helper
-  void _navigateToCategory(String status) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => MachineListPage(filterStatus: status),
-      ),
-    );
   }
 
   @override
@@ -70,48 +50,24 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              /// 🔥 WELCOME TEXT
               Text(
                 isLoading ? 'Welcome...' : 'Welcome, $adminName!',
-                style: const TextStyle(
-                  fontSize: 27,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black,
-                ),
+                style: const TextStyle(fontSize: 27, fontWeight: FontWeight.bold),
               ),
-
               const SizedBox(height: 30),
 
-              /// 🔢 SUMMARY CARDS
-              GridView.count(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 4,
-                crossAxisSpacing: 20,
-                mainAxisSpacing: 20,
-                childAspectRatio: 1.3,
-                children: [
-                  _buildSquare('Total Machines', '10', onTap: () => _navigateToCategory('All')),
-                  _buildSquare('Available', '4', onTap: () => _navigateToCategory('Available')),
-                  _buildSquare('In Use', '5', onTap: () => _navigateToCategory('In Use')),
-                  _buildSquare('Maintenance', '1', onTap: () => _navigateToCategory('Maintenance')),
-                ],
-              ),
+              /// 🔢 REAL-TIME SUMMARY CARDS
+              _buildRealTimeSummary(),
 
               const SizedBox(height: 40),
-
-              /// 📊 SYSTEM STATUS
               const Text(
                 'System Status Summary',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
               ),
-
               const SizedBox(height: 20),
 
-              _buildStatusTable(),
+              /// 📊 REAL-TIME TABLE (Maintenance Until Column Removed)
+              _buildRealTimeStatusTable(),
             ],
           ),
         ),
@@ -119,126 +75,142 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
     );
   }
 
-  /// 📋 TABLE
-  Widget _buildStatusTable() {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 10,
-          ),
-        ],
-      ),
-      child: DataTable(
-        headingRowColor: WidgetStateProperty.all(Colors.grey[100]),
-        columns: const [
-          DataColumn(label: Text('Type', style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text('Machine No', style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text('Last Update', style: TextStyle(fontWeight: FontWeight.bold))),
-        ],
-        rows: List.generate(5, (index) {
-          final type = index.isEven ? 'Washer' : 'Dryer';
-          return DataRow(
-            cells: [
-              DataCell(Text(type)),
-              DataCell(Text('${index + 1}')),
-              DataCell(_buildStatusBadge(index)),
-              const DataCell(Text('10:45 AM')),
-            ],
-          );
-        }),
-      ),
+  Widget _buildRealTimeSummary() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('washers').snapshots(),
+      builder: (context, washerSnap) {
+        return StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance.collection('dryers').snapshots(),
+          builder: (context, dryerSnap) {
+            if (!washerSnap.hasData || !dryerSnap.hasData) {
+              return const Center(child: LinearProgressIndicator());
+            }
+
+            final washerDocs = washerSnap.data!.docs;
+            final dryerDocs = dryerSnap.data!.docs;
+            final allDocs = [...washerDocs, ...dryerDocs];
+            
+            // Safe counting logic to prevent null errors
+            int total = allDocs.length;
+            int available = allDocs.where((doc) {
+              final data = doc.data() as Map<String, dynamic>?;
+              return (data?['status'] ?? 'Available') == 'Available';
+            }).length;
+
+            int inUse = allDocs.where((doc) {
+              final data = doc.data() as Map<String, dynamic>?;
+              return (data?['status'] ?? '') == 'In Use';
+            }).length;
+
+            int maintenance = allDocs.where((doc) {
+              final data = doc.data() as Map<String, dynamic>?;
+              return (data?['status'] ?? '') == 'Maintenance';
+            }).length;
+
+            return GridView.count(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: 4,
+              crossAxisSpacing: 20,
+              mainAxisSpacing: 20,
+              childAspectRatio: 1.3,
+              children: [
+                _buildSquare('Total Machines', total.toString()),
+                _buildSquare('Available', available.toString()),
+                _buildSquare('In Use', inUse.toString()),
+                _buildSquare('Maintenance', maintenance.toString()),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
-  /// 🟢 STATUS BADGE
-  Widget _buildStatusBadge(int index) {
-    List<String> statuses = ['Available', 'In Use', 'Maintenance'];
-    String status = statuses[index % 3];
+  Widget _buildRealTimeStatusTable() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('washers').snapshots(),
+      builder: (context, washerSnap) {
+        return StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance.collection('dryers').snapshots(),
+          builder: (context, dryerSnap) {
+            if (!washerSnap.hasData || !dryerSnap.hasData) return const SizedBox();
 
-    Color color = status == 'Available'
-        ? Colors.green
-        : status == 'In Use'
-            ? Colors.blue
-            : Colors.orange;
+            List<Map<String, dynamic>> tableData = [];
+            
+            void processDocs(List<QueryDocumentSnapshot> docs, String type) {
+              for (var doc in docs) {
+                final data = doc.data() as Map<String, dynamic>?;
+                if (data != null) {
+                  tableData.add({
+                    'type': type,
+                    'id': doc.id,
+                    'status': data['status'] ?? 'Available',
+                  });
+                }
+              }
+            }
 
+            processDocs(washerSnap.data!.docs, 'Washer');
+            processDocs(dryerSnap.data!.docs, 'Dryer');
+
+            return Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 10)],
+              ),
+              child: DataTable(
+                headingRowColor: WidgetStateProperty.all(Colors.grey[100]),
+                columns: const [
+                  DataColumn(label: Text('Type', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Machine No', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
+                ],
+                rows: tableData.map((data) {
+                  return DataRow(
+                    cells: [
+                      DataCell(Text(data['type'].toString())),
+                      DataCell(Text(data['id'].toString())),
+                      DataCell(_buildStatusBadge(data['status'].toString())),
+                    ],
+                  );
+                }).toList(),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildStatusBadge(String status) {
+    Color color = status == 'Available' ? Colors.green : status == 'In Use' ? Colors.blue : Colors.orange;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(10),
-      ),
+      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
       child: Text(
-        status,
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.bold,
-          fontSize: 12,
-        ),
+        status, 
+        style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12)
       ),
     );
   }
 
-  /// 🟣 SUMMARY CARD (Updated with InkWell for Ripple Effect)
-  Widget _buildSquare(String title, String value, {VoidCallback? onTap}) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
+  Widget _buildSquare(String title, String value) {
+    return Container(
+      decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        child: Ink(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFFE292FE), Color(0xFFBD61FF)],
-            ),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                value,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-        ),
+        gradient: const LinearGradient(colors: [Color(0xFFE292FE), Color(0xFFBD61FF)]),
       ),
-    );
-  }
-}
-
-/// --- Placeholder for the Detail Page ---
-class MachineListPage extends StatelessWidget {
-  final String filterStatus;
-  const MachineListPage({super.key, required this.filterStatus});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text('$filterStatus Machines')),
-      body: Center(child: Text('Displaying all $filterStatus machines here.')),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(title, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 10),
+          Text(value, style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
+        ],
+      ),
     );
   }
 }

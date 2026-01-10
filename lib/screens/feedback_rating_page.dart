@@ -106,7 +106,7 @@ class FeedbackRatingPageState extends State<FeedbackRatingPage> {
                     ),
                     actions: <Widget>[
                         TextButton(
-                            child: const Text('OK', style: TextStyle(color: Color(0xFF011FB6), fontWeight: FontWeight.bold)),
+                            child: const Text('OK', style: TextStyle(color: Color.fromARGB(255, 117, 2, 188), fontWeight: FontWeight.bold)),
                             onPressed: () {
                                 Navigator.of(context).pop(); // Close dialog
                                 Navigator.of(context).pop(); // Pop back to home screen
@@ -215,7 +215,7 @@ class FeedbackRatingPageState extends State<FeedbackRatingPage> {
                                         child: ElevatedButton(
                                             onPressed: _handleSubmit,
                                             style: ElevatedButton.styleFrom(
-                                                backgroundColor: _isSubmitted ? Colors.green.shade600 : const Color(0xFF011FB6),
+                                                backgroundColor: _isSubmitted ? Colors.green.shade600 : const Color.fromARGB(255, 77, 2, 206),
                                                 foregroundColor: Colors.white,
                                                 padding: const EdgeInsets.symmetric(vertical: 16),
                                                 shape: RoundedRectangleBorder(
