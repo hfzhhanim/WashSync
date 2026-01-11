@@ -15,6 +15,7 @@ class DryingMachine {
   final String name;
   DateTime? endTime;
   String? currentRemark;
+  String? status; // Added to match Admin App logic
   String? maintenanceUntil;
 
   DryingMachine({
@@ -22,6 +23,7 @@ class DryingMachine {
     required this.name,
     this.endTime,
     this.currentRemark,
+    this.status,
     this.maintenanceUntil,
   });
 
@@ -30,6 +32,7 @@ class DryingMachine {
       id: id,
       name: data['name'] ?? '',
       currentRemark: data['currentRemark'] ?? '',
+      status: data['status'] ?? 'Available', //
       maintenanceUntil: data['maintenanceUntil'],
       endTime: (data['endTime'] != null && data['endTime'] != "")
           ? DateTime.parse(data['endTime'])
@@ -93,8 +96,6 @@ class _DryerPageState extends State<DryerPage> {
   Timer? _cleanupTimer;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  
-  // Track popups to prevent duplicates
   final Set<String> _shownPopups = {};
 
   @override
@@ -107,6 +108,70 @@ class _DryerPageState extends State<DryerPage> {
     });
   }
 
+  // --- LOGIC TO AUTO-RELEASE MACHINES ---
+  void _autoReleaseExpiredMachines(List<DryingMachine> machines) {
+    DateTime now = DateTime.now();
+    for (var machine in machines) {
+      if (machine.currentRemark == "In Use" && machine.endTime != null && now.isAfter(machine.endTime!)) {
+        _firestore.collection('dryers').doc(machine.id).update({
+          'currentRemark': "",
+          'status': "Available",
+          'endTime': "",
+        });
+      }
+    }
+  }
+
+  // --- UPDATED CARD LOGIC: ONLY LOCK IF MAINTENANCE ---
+  Widget _buildDryerCard(DryingMachine machine, List<Booking> allBookings) {
+    bool isUnderMaintenance = machine.status == 'Maintenance'; 
+    bool isInUse = machine.currentRemark == "In Use";
+
+    return GestureDetector(
+      onTap: isUnderMaintenance
+          ? () => ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Dryer under maintenance. Please choose another.")))
+          : () => showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (c) => BookingModal(machine: machine, existingBookings: allBookings, onSave: _handleSaveBooking),
+              ),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+            color: isUnderMaintenance ? Colors.grey[100] : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+                color: isUnderMaintenance ? Colors.orange : (isInUse ? Colors.blue : Colors.purple.withOpacity(0.1)), 
+                width: 1.5)),
+        child: Row(
+          children: [
+            Icon(
+              isUnderMaintenance ? Icons.build_circle : Icons.dry, 
+              color: isUnderMaintenance ? Colors.orange : (isInUse ? Colors.blue : Colors.purple), 
+              size: 28
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(machine.name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isUnderMaintenance ? Colors.grey[600] : Colors.black)),
+                  if (isUnderMaintenance) const Text("Offline: Maintenance", style: TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold)),
+                  if (isInUse) const Text("Book for another slot ", style: TextStyle(color: Colors.blue, fontSize: 11, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+            if (isUnderMaintenance) const Badge(label: Text("OFFLINE"), backgroundColor: Colors.orange),
+            if (isInUse) const Badge(label: Text("IN USE"), backgroundColor: Colors.blue),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _seedDryers() async {
     final dryerCollection = _firestore.collection('dryers');
     final snapshot = await dryerCollection.get();
@@ -116,6 +181,8 @@ class _DryerPageState extends State<DryerPage> {
           'name': 'Dryer $i',
           'endTime': '',
           'currentRemark': '',
+          'status': 'Available', //
+          'maintenanceUntil': '',
         });
       }
     }
@@ -125,8 +192,7 @@ class _DryerPageState extends State<DryerPage> {
     _cleanupTimer = Timer.periodic(const Duration(seconds: 30), (timer) async {
       if (!mounted) return;
       final now = DateTime.now();
-      final snapshot = await _firestore
-          .collection('bookings')
+      final snapshot = await _firestore.collection('bookings')
           .where('type', isEqualTo: 'Dryer')
           .where('isConfirmed', isEqualTo: false)
           .get();
@@ -156,13 +222,6 @@ class _DryerPageState extends State<DryerPage> {
     if (user == null) return;
 
     final bookingRef = _firestore.collection('bookings');
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => const Center(child: CircularProgressIndicator()),
-    );
-
     try {
       await _firestore.runTransaction((transaction) async {
         QuerySnapshot existing = await bookingRef
@@ -172,8 +231,7 @@ class _DryerPageState extends State<DryerPage> {
 
         if (existing.docs.isNotEmpty) throw Exception("Slot taken!");
 
-        DocumentReference newDoc = bookingRef.doc(newBooking.id);
-        transaction.set(newDoc, {
+        transaction.set(bookingRef.doc(newBooking.id), {
           'machineId': newBooking.machineId,
           'machineName': newBooking.machineName,
           'userId': user.uid,
@@ -183,7 +241,6 @@ class _DryerPageState extends State<DryerPage> {
           'endTime': newBooking.endTime.toIso8601String(),
           'isConfirmed': false,
           'isPaid': false,
-          'createdAt': FieldValue.serverTimestamp(),
         });
       });
 
@@ -191,20 +248,16 @@ class _DryerPageState extends State<DryerPage> {
       NotificationService.scheduleNotification(
         id: newBooking.id.hashCode,
         title: "Dryer Turn Soon!",
-        body: "Your turn starts in 5 minutes. Please arrive to avoid cancellation.",
+        body: "Your turn for ${newBooking.machineName} starts in 5 minutes.",
         scheduledTime: reminderTime,
       );
 
       if (mounted) {
-        Navigator.pop(context); // Close loading
-        Navigator.pop(context); // Close modal
+        Navigator.of(context).pop();
         _showSuccessPopup(newBooking);
       }
     } catch (e) {
-      if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -232,25 +285,17 @@ class _DryerPageState extends State<DryerPage> {
 
   Future<void> _handlePayAndStart(Booking booking) async {
     final user = FirebaseAuth.instance.currentUser;
+    if (user?.uid != booking.userId) return;
 
-    // Security Check
-    if (user?.uid != booking.userId) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Unauthorized")));
-      return;
-    }
-
-    // Extract machine number for analytics
     String machineNumber = booking.machineName.replaceAll(RegExp(r'[^0-9]'), '');
 
     final bool? success = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => PaymentScreen(
-          machineType: "Dryer",
-          machineNo: machineNumber,
-        ),
-      ),
-    );
+        context,
+        MaterialPageRoute(
+            builder: (_) => PaymentScreen(
+                  machineType: "Dryer",
+                  machineNo: machineNumber,
+                )));
 
     if (success == true) {
       DateTime dryEndTime = DateTime.now().add(const Duration(minutes: 30));
@@ -259,12 +304,12 @@ class _DryerPageState extends State<DryerPage> {
       DocumentReference bookingDoc = _firestore.collection('bookings').doc(booking.id);
       DocumentReference machineDoc = _firestore.collection('dryers').doc(booking.machineId);
 
-      // Duplicate removal: historyDoc and batch.set(historyDoc...) removed here
-
       batch.update(bookingDoc, {'isPaid': true});
+      // UPDATED: Sync both fields for Admin App
       batch.update(machineDoc, {
         'endTime': dryEndTime.toIso8601String(),
         'currentRemark': "In Use",
+        'status': "In Use", 
       });
 
       await batch.commit();
@@ -314,75 +359,21 @@ class _DryerPageState extends State<DryerPage> {
     return "${twoDigits(d.inHours)}:${twoDigits(d.inMinutes.remainder(60))}:${twoDigits(d.inSeconds.remainder(60))}";
   }
 
-  Widget _buildDryerCard(DryingMachine machine, List<Booking> allBookings) {
-    bool isUnderMaintenance = false;
-    if (machine.maintenanceUntil != null && machine.maintenanceUntil!.isNotEmpty) {
-      try {
-        DateTime endMaintenance = DateTime.parse(machine.maintenanceUntil!);
-        DateTime expiryPoint = DateTime(endMaintenance.year, endMaintenance.month, endMaintenance.day, 23, 59, 59);
-        if (DateTime.now().isBefore(expiryPoint)) isUnderMaintenance = true;
-      } catch (e) {
-        debugPrint("Date parsing error: $e");
-      }
-    }
-
-    return GestureDetector(
-      onTap: isUnderMaintenance
-          ? () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Dryer under maintenance.")))
-          : () => showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                backgroundColor: Colors.transparent,
-                builder: (c) => BookingModal(machine: machine, existingBookings: allBookings, onSave: _handleSaveBooking),
-              ),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-            color: isUnderMaintenance ? Colors.grey[100] : Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: isUnderMaintenance ? Colors.orange : Colors.purple.withOpacity(0.1), width: 1.5)),
-        child: Row(
-          children: [
-            Icon(isUnderMaintenance ? Icons.build_circle : Icons.dry, color: isUnderMaintenance ? Colors.orange : Colors.purple, size: 28),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(machine.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  if (isUnderMaintenance)
-                    Text("Maintenance until ${machine.maintenanceUntil}", style: const TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold)),
-                ],
-              ),
-            ),
-            if (isUnderMaintenance) const Badge(label: Text("OFFLINE"), backgroundColor: Colors.orange),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final String? currentUid = _auth.currentUser?.uid;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("WashSync - Dryer", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-        backgroundColor: const Color(0xFFB97AD9),
-        centerTitle: true,
-        leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.pop(context)),
-      ),
+      appBar: AppBar(title: const Text("WashSync - Dryer", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)), backgroundColor: const Color(0xFFB97AD9), centerTitle: true),
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(colors: [Color(0xFFF3E5F5), Colors.white], begin: Alignment.topCenter, end: Alignment.bottomCenter),
-        ),
+        decoration: const BoxDecoration(gradient: LinearGradient(colors: [Color(0xFFF3E5F5), Colors.white], begin: Alignment.topCenter, end: Alignment.bottomCenter)),
         child: StreamBuilder<QuerySnapshot>(
           stream: _firestore.collection('dryers').snapshots(),
           builder: (context, dryerSnapshot) {
             if (!dryerSnapshot.hasData) return const Center(child: CircularProgressIndicator());
             final machines = dryerSnapshot.data!.docs.map((doc) => DryingMachine.fromFirestore(doc.data() as Map<String, dynamic>, doc.id)).toList();
+
+            _autoReleaseExpiredMachines(machines);
 
             return StreamBuilder<QuerySnapshot>(
               stream: _firestore.collection('bookings').where('type', isEqualTo: 'Dryer').snapshots(),
@@ -433,7 +424,6 @@ class _DryerPageState extends State<DryerPage> {
     bool isBeforeSlot = now.isBefore(booking.startTime);
     bool isConfirmWindow = now.isAfter(booking.startTime.subtract(const Duration(minutes: 5))) && now.isBefore(booking.startTime.add(const Duration(minutes: 5)));
 
-    // Auto-popup logic for finished cycles
     if (booking.isPaid && machine.endTime != null && now.isAfter(machine.endTime!)) {
       if (!_shownPopups.contains(booking.id)) {
         _shownPopups.add(booking.id);
@@ -458,7 +448,7 @@ class _DryerPageState extends State<DryerPage> {
             ),
             const Divider(),
             if (isCycleRunning) ...[
-              const Text("Drying Cycle In Progress", style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 16)),
+              const Text("Dry Cycle In Progress", style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 16)),
               const SizedBox(height: 12),
               LinearProgressIndicator(
                 value: 1 - (machine.endTime!.difference(now).inSeconds / 1800),
@@ -481,8 +471,7 @@ class _DryerPageState extends State<DryerPage> {
   }
 }
 
-// -------------------- BOOKING MODAL (Remains mostly same) --------------------
-
+// -------------------- BOOKING MODAL (UPDATED SLOTS) --------------------
 class BookingModal extends StatefulWidget {
   final DryingMachine machine;
   final List<Booking> existingBookings;
@@ -506,6 +495,7 @@ class _BookingModalState extends State<BookingModal> {
     _generateSlots();
   }
 
+  // --- UPDATED: ALSO BLOCK SLOTS IF MACHINE IS CURRENTLY RUNNING ---
   void _generateSlots() {
     _slots.clear();
     DateTime now = DateTime.now();
@@ -522,10 +512,11 @@ class _BookingModalState extends State<BookingModal> {
         continue;
       }
 
+      // Check against existing bookings AND the machine's current running time
       bool isTaken = widget.existingBookings.any((booking) {
         if (booking.machineId != widget.machine.id) return false;
         return slotStart.isBefore(booking.endTime) && slotEnd.isAfter(booking.startTime);
-      });
+      }) || (widget.machine.endTime != null && slotStart.isBefore(widget.machine.endTime!)); 
 
       _slots.add({'date': runner, 'isTaken': isTaken});
       runner = runner.add(Duration(minutes: _stepMinutes));
@@ -584,7 +575,7 @@ class _BookingModalState extends State<BookingModal> {
               onPressed: _selectedSlot == null ? null : () {
                 final user = FirebaseAuth.instance.currentUser;
                 final booking = Booking(
-                  id: DateTime.now().millisecondsSinceEpoch.toString(), 
+                  id: DateTime.now().millisecondsSinceEpoch.toString(),
                   machineId: widget.machine.id,
                   machineName: widget.machine.name,
                   userId: user?.uid ?? 'unknown',

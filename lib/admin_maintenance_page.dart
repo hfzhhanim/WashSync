@@ -18,57 +18,30 @@ class _AdminMaintenancePageState extends State<AdminMaintenancePage> {
   final TextEditingController _endDateController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
   
-  bool _isLoading = true;
+  bool _isLoading = false;
 
-  // Local machine list
+  // Local machine list structure
   final List<Map<String, dynamic>> _machines = [
-    {'type': 'Washer', 'no': 1, 'isScheduled': false},
-    {'type': 'Washer', 'no': 2, 'isScheduled': false},
-    {'type': 'Washer', 'no': 3, 'isScheduled': false},
-    {'type': 'Washer', 'no': 4, 'isScheduled': false},
-    {'type': 'Washer', 'no': 5, 'isScheduled': false},
-    {'type': 'Dryer', 'no': 1, 'isScheduled': false},
-    {'type': 'Dryer', 'no': 2, 'isScheduled': false},
-    {'type': 'Dryer', 'no': 3, 'isScheduled': false},
-    {'type': 'Dryer', 'no': 4, 'isScheduled': false},
-    {'type': 'Dryer', 'no': 5, 'isScheduled': false},
+    {'type': 'Washer', 'no': 1},
+    {'type': 'Washer', 'no': 2},
+    {'type': 'Washer', 'no': 3},
+    {'type': 'Washer', 'no': 4},
+    {'type': 'Washer', 'no': 5},
+    {'type': 'Dryer', 'no': 1},
+    {'type': 'Dryer', 'no': 2},
+    {'type': 'Dryer', 'no': 3},
+    {'type': 'Dryer', 'no': 4},
+    {'type': 'Dryer', 'no': 5},
   ];
 
-  @override
-  void initState() {
-    super.initState();
-    _syncWithFirestore();
-  }
-
-  // Syncs local list with Firestore on page load
-  Future<void> _syncWithFirestore() async {
-    try {
-      for (var machine in _machines) {
-        String collection = machine['type'] == 'Washer' ? 'washers' : 'dryers';
-        String docId = machine['no'].toString();
-        var doc = await FirebaseFirestore.instance.collection(collection).doc(docId).get();
-        
-        if (doc.exists) {
-          final data = doc.data();
-          if (data != null && data['status'] == 'Maintenance') {
-            setState(() {
-              machine['isScheduled'] = true;
-            });
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint("Sync error: $e");
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
+  // Helper to get collection names
+  String _getCollection(String type) => type == 'Washer' ? 'washers' : 'dryers';
 
   // Save or update maintenance info
   void _saveMaintenance() async {
     if (_formKey.currentState!.validate() && _selectedMachineIndex != null) {
       var machine = _machines[_selectedMachineIndex!];
-      String collection = machine['type'] == 'Washer' ? 'washers' : 'dryers';
+      String collection = _getCollection(machine['type']);
       String docId = machine['no'].toString();
 
       try {
@@ -84,7 +57,6 @@ class _AdminMaintenancePageState extends State<AdminMaintenancePage> {
         );
 
         setState(() {
-          _machines[_selectedMachineIndex!]['isScheduled'] = true;
           _selectedMachineIndex = null;
           _clearForm();
         });
@@ -104,7 +76,7 @@ class _AdminMaintenancePageState extends State<AdminMaintenancePage> {
   void _completeMaintenanceEarly() async {
     if (_selectedMachineIndex != null) {
       var machine = _machines[_selectedMachineIndex!];
-      String collection = machine['type'] == 'Washer' ? 'washers' : 'dryers';
+      String collection = _getCollection(machine['type']);
       String docId = machine['no'].toString();
 
       try {
@@ -120,7 +92,6 @@ class _AdminMaintenancePageState extends State<AdminMaintenancePage> {
         );
 
         setState(() {
-          _machines[_selectedMachineIndex!]['isScheduled'] = false;
           _selectedMachineIndex = null;
           _clearForm();
         });
@@ -165,7 +136,7 @@ class _AdminMaintenancePageState extends State<AdminMaintenancePage> {
 
   Widget _buildTableContainer() {
     return Container(
-      width: double.infinity, // Ensures card fills horizontal space
+      width: double.infinity,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(15),
@@ -174,8 +145,8 @@ class _AdminMaintenancePageState extends State<AdminMaintenancePage> {
       child: DataTable(
         headingRowHeight: 60,
         dataRowMaxHeight: 70,
-        horizontalMargin: 20, // Padding for the left side of table
-        columnSpacing: 0, // We use Expanded in headers to spread columns
+        horizontalMargin: 20,
+        columnSpacing: 0,
         columns: const [
           DataColumn(label: Expanded(child: Text('Machine Type', style: TextStyle(fontWeight: FontWeight.bold)))),
           DataColumn(label: Expanded(child: Text('No.', style: TextStyle(fontWeight: FontWeight.bold)))),
@@ -184,41 +155,71 @@ class _AdminMaintenancePageState extends State<AdminMaintenancePage> {
         ],
         rows: _machines.asMap().entries.map((e) {
           final machine = e.value;
-          final bool isScheduled = machine['isScheduled'] ?? false;
+          final docRef = FirebaseFirestore.instance
+              .collection(_getCollection(machine['type']))
+              .doc(machine['no'].toString());
 
           return DataRow(cells: [
-            DataCell(Text(machine['type']?.toString() ?? '')), // Left aligned
+            DataCell(Text(machine['type']?.toString() ?? '')),
             DataCell(Text(machine['no']?.toString() ?? '')),
-            DataCell(_buildStatusBadge(isScheduled ? 'Maintenance' : 'Available')),
             DataCell(
-              TextButton.icon(
-                icon: Icon(isScheduled ? Icons.edit_note : Icons.calendar_month, size: 18),
-                label: Text(isScheduled ? "Update" : "Schedule"),
-                style: TextButton.styleFrom(
-                  foregroundColor: isScheduled ? Colors.orange[800] : Colors.purple,
-                  padding: EdgeInsets.zero,
-                ),
-                onPressed: () async {
-                  setState(() => _selectedMachineIndex = e.key);
-                  
-                  if (isScheduled) {
-                    // Fetch and fill the form with existing data when updating
-                    var doc = await FirebaseFirestore.instance
-                        .collection(machine['type'] == 'Washer' ? 'washers' : 'dryers')
-                        .doc(machine['no'].toString())
-                        .get();
-                    
-                    if (doc.exists) {
-                      var data = doc.data()!;
-                      setState(() {
-                        _startDateController.text = data['maintenanceStart'] ?? '';
-                        _endDateController.text = data['maintenanceUntil'] ?? '';
-                        _descriptionController.text = data['maintenanceDescription'] ?? '';
-                      });
-                    }
-                  } else {
-                    _clearForm();
+              StreamBuilder<DocumentSnapshot>(
+                stream: docRef.snapshots(),
+                builder: (context, snapshot) {
+                  // Safe check to prevent "Bad State" error
+                  if (!snapshot.hasData || !snapshot.data!.exists) {
+                    return _buildStatusBadge('Available');
                   }
+
+                  final data = snapshot.data!.data() as Map<String, dynamic>;
+                  String currentStatus = data['status'] ?? 'Available';
+
+                  // Logic to check your current Firebase field 'currentRemark'
+                  if (data['currentRemark'] == 'In Use') {
+                    currentStatus = 'In Use';
+                  }
+
+                  return _buildStatusBadge(currentStatus);
+                },
+              ),
+            ),
+            DataCell(
+              StreamBuilder<DocumentSnapshot>(
+                stream: docRef.snapshots(),
+                builder: (context, snapshot) {
+                  String currentStatus = 'Available';
+                  bool hasData = snapshot.hasData && snapshot.data!.exists;
+
+                  if (hasData) {
+                    final data = snapshot.data!.data() as Map<String, dynamic>;
+                    currentStatus = data['status'] ?? 'Available';
+                    if (data['currentRemark'] == 'In Use') currentStatus = 'In Use';
+                  }
+
+                  final bool isScheduled = currentStatus == 'Maintenance';
+                  final bool isInUse = currentStatus == 'In Use';
+
+                  return TextButton.icon(
+                    icon: Icon(isInUse ? Icons.lock : (isScheduled ? Icons.edit_note : Icons.calendar_month), size: 18),
+                    label: Text(isInUse ? "In Use" : (isScheduled ? "Update" : "Schedule")),
+                    style: TextButton.styleFrom(
+                      foregroundColor: isInUse ? Colors.blueGrey : (isScheduled ? Colors.orange[800] : Colors.purple),
+                      padding: EdgeInsets.zero,
+                    ),
+                    onPressed: isInUse ? null : () async {
+                      setState(() => _selectedMachineIndex = e.key);
+                      if (isScheduled && hasData) {
+                        final data = snapshot.data!.data() as Map<String, dynamic>;
+                        setState(() {
+                          _startDateController.text = data['maintenanceStart'] ?? '';
+                          _endDateController.text = data['maintenanceUntil'] ?? '';
+                          _descriptionController.text = data['maintenanceDescription'] ?? '';
+                        });
+                      } else {
+                        _clearForm();
+                      }
+                    },
+                  );
                 },
               ),
             ),
@@ -228,10 +229,37 @@ class _AdminMaintenancePageState extends State<AdminMaintenancePage> {
     );
   }
 
+  Widget _buildStatusBadge(String status) {
+    Color badgeColor;
+    if (status == 'Maintenance') {
+      badgeColor = Colors.orange;
+    } else if (status == 'In Use') {
+      badgeColor = Colors.blue;
+    } else {
+      badgeColor = Colors.green;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: badgeColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: badgeColor),
+      ),
+      child: Text(
+        status.toUpperCase(),
+        style: TextStyle(
+          color: badgeColor.withOpacity(0.9),
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
   Widget _buildMaintenanceForm() {
     var machine = _machines[_selectedMachineIndex!];
-    bool isScheduled = machine['isScheduled'] ?? false;
-
+    
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(25),
@@ -293,7 +321,7 @@ class _AdminMaintenancePageState extends State<AdminMaintenancePage> {
               children: [
                 ElevatedButton.icon(
                   icon: const Icon(Icons.save),
-                  label: Text(isScheduled ? 'Update Maintenance' : 'Confirm Schedule'),
+                  label: const Text('Save Changes'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.purple[600],
                     foregroundColor: Colors.white,
@@ -302,20 +330,33 @@ class _AdminMaintenancePageState extends State<AdminMaintenancePage> {
                   ),
                   onPressed: _saveMaintenance,
                 ),
-                if (isScheduled) ...[
-                  const SizedBox(width: 15),
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.check_circle),
-                    label: const Text('Mark as Available'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.green[700],
-                      side: BorderSide(color: Colors.green.shade700),
-                      padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 18),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    onPressed: _completeMaintenanceEarly,
-                  ),
-                ],
+                const SizedBox(width: 15),
+                // Only show "Mark as Available" if currently in maintenance
+                StreamBuilder<DocumentSnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection(_getCollection(machine['type']))
+                      .doc(machine['no'].toString())
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (snapshot.hasData && snapshot.data!.exists) {
+                      final data = snapshot.data!.data() as Map<String, dynamic>;
+                      if (data['status'] == 'Maintenance') {
+                        return OutlinedButton.icon(
+                          icon: const Icon(Icons.check_circle),
+                          label: const Text('Mark as Available'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.green[700],
+                            side: BorderSide(color: Colors.green.shade700),
+                            padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 18),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onPressed: _completeMaintenanceEarly,
+                        );
+                      }
+                    }
+                    return const SizedBox.shrink();
+                  },
+                ),
               ],
             ),
           ],
@@ -324,7 +365,6 @@ class _AdminMaintenancePageState extends State<AdminMaintenancePage> {
     );
   }
 
-  // Reusable DatePicker with Calendar Icon
   Widget _buildDatePicker({required TextEditingController controller, required String label}) {
     return TextFormField(
       controller: controller,
@@ -338,13 +378,10 @@ class _AdminMaintenancePageState extends State<AdminMaintenancePage> {
       ),
       validator: (val) => val == null || val.isEmpty ? 'Pick a date' : null,
       onTap: () async {
-        DateTime now = DateTime.now();
-        DateTime today = DateTime(now.year, now.month, now.day);
-
         DateTime? picked = await showDatePicker(
           context: context,
-          initialDate: today,
-          firstDate: DateTime(today.year - 1),
+          initialDate: DateTime.now(),
+          firstDate: DateTime(2024),
           lastDate: DateTime(2030),
         );
         if (picked != null) {
@@ -353,26 +390,6 @@ class _AdminMaintenancePageState extends State<AdminMaintenancePage> {
           });
         }
       },
-    );
-  }
-
-  Widget _buildStatusBadge(String status) {
-    bool isMaintenace = status == 'Maintenance';
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: isMaintenace ? Colors.orange[50] : Colors.green[50],
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: isMaintenace ? Colors.orange : Colors.green),
-      ),
-      child: Text(
-        status.toUpperCase(),
-        style: TextStyle(
-          color: isMaintenace ? Colors.orange[800] : Colors.green[700],
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
     );
   }
 }
