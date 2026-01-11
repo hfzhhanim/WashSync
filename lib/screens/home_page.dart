@@ -138,7 +138,7 @@ class _HomePageState extends State<HomePage> {
               _machineBar(
                 title: "Dryer",
                 collectionPath: "dryers",
-                icon: Icons.dry,
+                icon: Icons.heat_pump,
                 color: const Color(0xFFB97AD9),
                 onTap: () => _navigateTo(DryerPage()), // Removed const
               ),
