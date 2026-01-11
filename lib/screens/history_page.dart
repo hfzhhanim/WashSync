@@ -226,7 +226,7 @@ class HistoryPage extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
       ),
       child: Icon(
-        isWasher ? Icons.local_laundry_service : (isDryer ? Icons.wb_sunny_outlined : Icons.help_outline),
+        isWasher ? Icons.local_laundry_service : (isDryer ? Icons.dry_outlined : Icons.help_outline),
         color: isWasher ? Colors.purple : (isDryer ? Colors.blue : Colors.grey),
       ),
     );
