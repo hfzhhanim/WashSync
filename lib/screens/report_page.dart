@@ -201,10 +201,18 @@ class ReportPageState extends State<ReportPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Report Issue'),
-        backgroundColor: const Color(0xC2A669D4),
-        foregroundColor: Colors.white,
-      ),
+  title: const Text(
+    "Report Issue",
+    style: TextStyle(
+      color: Colors.white, 
+      fontSize: 22, 
+      fontWeight: FontWeight.bold,
+    ),
+  ),
+  backgroundColor: const Color(0xC2A669D4), // Keep your theme color
+  foregroundColor: Colors.white,
+  elevation: 0, // Optional: makes it look flatter and cleaner like most history headers
+),
       body: Stack(
         children: [
           SingleChildScrollView(
@@ -281,7 +289,7 @@ class ReportPageState extends State<ReportPage> {
                     child: ElevatedButton(
                       onPressed: _isSubmitting ? null : _handleSubmit,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF011FB6),
+                        backgroundColor: const Color.fromARGB(255, 111, 18, 203),
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

@@ -215,7 +215,7 @@ class FeedbackRatingPageState extends State<FeedbackRatingPage> {
                                         child: ElevatedButton(
                                             onPressed: _handleSubmit,
                                             style: ElevatedButton.styleFrom(
-                                                backgroundColor: _isSubmitted ? Colors.green.shade600 : const Color.fromARGB(255, 77, 2, 206),
+                                                backgroundColor: _isSubmitted ? Colors.green.shade600 : const Color.fromARGB(255, 111, 18, 203),
                                                 foregroundColor: Colors.white,
                                                 padding: const EdgeInsets.symmetric(vertical: 16),
                                                 shape: RoundedRectangleBorder(

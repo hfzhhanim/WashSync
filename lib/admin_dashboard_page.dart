@@ -66,7 +66,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
               ),
               const SizedBox(height: 20),
 
-              /// 📊 REAL-TIME TABLE (Maintenance Until Column Removed)
+              /// 📊 REAL-TIME TABLE
               _buildRealTimeStatusTable(),
             ],
           ),
@@ -86,26 +86,24 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
               return const Center(child: LinearProgressIndicator());
             }
 
-            final washerDocs = washerSnap.data!.docs;
-            final dryerDocs = dryerSnap.data!.docs;
-            final allDocs = [...washerDocs, ...dryerDocs];
+            final allDocs = [...washerSnap.data!.docs, ...dryerSnap.data!.docs];
             
-            // Safe counting logic to prevent null errors
             int total = allDocs.length;
-            int available = allDocs.where((doc) {
-              final data = doc.data() as Map<String, dynamic>?;
-              return (data?['status'] ?? 'Available') == 'Available';
-            }).length;
+            int inUse = 0;
+            int maintenance = 0;
+            int available = 0;
 
-            int inUse = allDocs.where((doc) {
-              final data = doc.data() as Map<String, dynamic>?;
-              return (data?['status'] ?? '') == 'In Use';
-            }).length;
-
-            int maintenance = allDocs.where((doc) {
-              final data = doc.data() as Map<String, dynamic>?;
-              return (data?['status'] ?? '') == 'Maintenance';
-            }).length;
+            for (var doc in allDocs) {
+              final data = doc.data() as Map<String, dynamic>;
+              // LINKING LOGIC: Check currentRemark for "In Use" first
+              if (data['currentRemark'] == 'In Use' || data['status'] == 'In Use') {
+                inUse++;
+              } else if (data['status'] == 'Maintenance') {
+                maintenance++;
+              } else {
+                available++;
+              }
+            }
 
             return GridView.count(
               shrinkWrap: true,
@@ -140,14 +138,19 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
             
             void processDocs(List<QueryDocumentSnapshot> docs, String type) {
               for (var doc in docs) {
-                final data = doc.data() as Map<String, dynamic>?;
-                if (data != null) {
-                  tableData.add({
-                    'type': type,
-                    'id': doc.id,
-                    'status': data['status'] ?? 'Available',
-                  });
+                final data = doc.data() as Map<String, dynamic>;
+                
+                // Determine display status based on linked fields
+                String displayStatus = data['status'] ?? 'Available';
+                if (data['currentRemark'] == 'In Use') {
+                  displayStatus = 'In Use';
                 }
+
+                tableData.add({
+                  'type': type,
+                  'id': doc.id,
+                  'status': displayStatus,
+                });
               }
             }
 
@@ -186,7 +189,15 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
   }
 
   Widget _buildStatusBadge(String status) {
-    Color color = status == 'Available' ? Colors.green : status == 'In Use' ? Colors.blue : Colors.orange;
+    Color color;
+    if (status == 'Available') {
+      color = Colors.green;
+    } else if (status == 'In Use') {
+      color = Colors.blue;
+    } else {
+      color = Colors.orange;
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),

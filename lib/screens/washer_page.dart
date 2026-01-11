@@ -1,12 +1,13 @@
 import '../services/notification_service.dart';
 import 'dart:async';
+import 'dart:math'; // Added for randomization logic
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:collection/collection.dart';
 import 'payment_screen.dart';
-import 'feedback_rating_page.dart'; // Added for the Rate Us link
+import 'feedback_rating_page.dart';
 
 // -------------------- MODELS --------------------
 
@@ -15,6 +16,7 @@ class WashingMachine {
   final String name;
   DateTime? endTime;
   String? currentRemark;
+  String? status; 
   String? maintenanceUntil;
 
   WashingMachine({
@@ -22,6 +24,7 @@ class WashingMachine {
     required this.name,
     this.endTime,
     this.currentRemark,
+    this.status,
     this.maintenanceUntil,
   });
 
@@ -30,6 +33,7 @@ class WashingMachine {
       id: id,
       name: data['name'] ?? '',
       currentRemark: data['currentRemark'] ?? '',
+      status: data['status'] ?? 'Available',
       maintenanceUntil: data['maintenanceUntil'],
       endTime: (data['endTime'] != null && data['endTime'] != "")
           ? DateTime.parse(data['endTime'])
@@ -93,8 +97,6 @@ class _WasherPageState extends State<WasherPage> {
   Timer? _cleanupTimer;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-
-  // Track popups to prevent duplicates
   final Set<String> _shownPopups = {};
 
   @override
@@ -107,20 +109,22 @@ class _WasherPageState extends State<WasherPage> {
     });
   }
 
-  // --- UI FUNCTIONS ---
-
-  Widget _buildWasherCard(WashingMachine machine, List<Booking> allBookings) {
-    bool isUnderMaintenance = false;
-    if (machine.maintenanceUntil != null && machine.maintenanceUntil!.isNotEmpty) {
-      try {
-        DateTime endMaintenance = DateTime.parse(machine.maintenanceUntil!);
-        if (DateTime.now().isBefore(endMaintenance.add(const Duration(days: 1)))) {
-          isUnderMaintenance = true;
-        }
-      } catch (e) {
-        debugPrint("Date parse error: $e");
+  void _autoReleaseExpiredMachines(List<WashingMachine> machines) {
+    DateTime now = DateTime.now();
+    for (var machine in machines) {
+      if (machine.currentRemark == "In Use" && machine.endTime != null && now.isAfter(machine.endTime!)) {
+        _firestore.collection('washers').doc(machine.id).update({
+          'currentRemark': "",
+          'status': "Available",
+          'endTime': "",
+        });
       }
     }
+  }
+
+  Widget _buildWasherCard(WashingMachine machine, List<Booking> allBookings) {
+    bool isUnderMaintenance = machine.status == 'Maintenance'; 
+    bool isInUse = machine.currentRemark == "In Use";
 
     return GestureDetector(
       onTap: isUnderMaintenance
@@ -138,21 +142,29 @@ class _WasherPageState extends State<WasherPage> {
         decoration: BoxDecoration(
             color: isUnderMaintenance ? Colors.grey[100] : Colors.white,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: isUnderMaintenance ? Colors.orange : Colors.purple.withOpacity(0.1), width: 1.5)),
+            border: Border.all(
+                color: isUnderMaintenance ? Colors.orange : (isInUse ? Colors.blue : Colors.purple.withOpacity(0.1)), 
+                width: 1.5)),
         child: Row(
           children: [
-            Icon(isUnderMaintenance ? Icons.build_circle : Icons.local_laundry_service, color: isUnderMaintenance ? Colors.orange : Colors.purple, size: 28),
+            Icon(
+              isUnderMaintenance ? Icons.build_circle : Icons.local_laundry_service, 
+              color: isUnderMaintenance ? Colors.orange : (isInUse ? Colors.blue : Colors.purple), 
+              size: 28
+            ),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(machine.name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isUnderMaintenance ? Colors.grey[600] : Colors.black)),
-                  if (isUnderMaintenance) Text("Available after: ${machine.maintenanceUntil}", style: const TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold)),
+                  if (isUnderMaintenance) const Text("Offline: Maintenance", style: TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold)),
+                  if (isInUse) const Text("Book for another slot", style: TextStyle(color: Colors.blue, fontSize: 11, fontWeight: FontWeight.bold)),
                 ],
               ),
             ),
             if (isUnderMaintenance) const Badge(label: Text("OFFLINE"), backgroundColor: Colors.orange),
+            if (isInUse) const Badge(label: Text("IN USE"), backgroundColor: Colors.blue),
           ],
         ),
       ),
@@ -168,6 +180,7 @@ class _WasherPageState extends State<WasherPage> {
           'name': 'Washer $i',
           'endTime': '',
           'currentRemark': '',
+          'status': 'Available',
           'maintenanceUntil': '',
         });
       }
@@ -178,7 +191,10 @@ class _WasherPageState extends State<WasherPage> {
     _cleanupTimer = Timer.periodic(const Duration(seconds: 30), (timer) async {
       if (!mounted) return;
       final now = DateTime.now();
-      final snapshot = await _firestore.collection('bookings').where('type', isEqualTo: 'Washer').where('isConfirmed', isEqualTo: false).get();
+      final snapshot = await _firestore.collection('bookings')
+          .where('type', isEqualTo: 'Washer')
+          .where('isConfirmed', isEqualTo: false)
+          .get();
 
       for (var doc in snapshot.docs) {
         final startTimeString = doc.data()['startTime'];
@@ -207,7 +223,10 @@ class _WasherPageState extends State<WasherPage> {
     final bookingRef = _firestore.collection('bookings');
     try {
       await _firestore.runTransaction((transaction) async {
-        QuerySnapshot existing = await bookingRef.where('machineId', isEqualTo: newBooking.machineId).where('startTime', isEqualTo: newBooking.startTime.toIso8601String()).get();
+        QuerySnapshot existing = await bookingRef
+            .where('machineId', isEqualTo: newBooking.machineId)
+            .where('startTime', isEqualTo: newBooking.startTime.toIso8601String())
+            .get();
 
         if (existing.docs.isNotEmpty) throw Exception("Slot already taken!");
 
@@ -263,16 +282,9 @@ class _WasherPageState extends State<WasherPage> {
     await _firestore.collection('bookings').doc(bookingId).update({'isConfirmed': true});
   }
 
-  // --- UPDATED PAYMENT AND START LOGIC ---
-
   Future<void> _handlePayAndStart(Booking booking) async {
     final user = FirebaseAuth.instance.currentUser;
-
-    // Security check: Only the owner triggers code
-    if (user?.uid != booking.userId) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Unauthorized")));
-      return;
-    }
+    if (user?.uid != booking.userId) return;
 
     String machineNumber = booking.machineName.replaceAll(RegExp(r'[^0-9]'), '');
 
@@ -291,12 +303,11 @@ class _WasherPageState extends State<WasherPage> {
       DocumentReference bookingDoc = _firestore.collection('bookings').doc(booking.id);
       DocumentReference machineDoc = _firestore.collection('washers').doc(booking.machineId);
 
-      // historyDoc removed: PaymentScreen handles history now
-
       batch.update(bookingDoc, {'isPaid': true});
       batch.update(machineDoc, {
         'endTime': washEndTime.toIso8601String(),
         'currentRemark': "In Use",
+        'status': "In Use", 
       });
 
       await batch.commit();
@@ -316,8 +327,6 @@ class _WasherPageState extends State<WasherPage> {
       );
     }
   }
-
-  // --- AUTO RATE US POPUP ---
 
   void _showRateUsPopup(String machineName) {
     showDialog(
@@ -361,6 +370,8 @@ class _WasherPageState extends State<WasherPage> {
           builder: (context, washerSnapshot) {
             if (!washerSnapshot.hasData) return const Center(child: CircularProgressIndicator());
             final machines = washerSnapshot.data!.docs.map((doc) => WashingMachine.fromFirestore(doc.data() as Map<String, dynamic>, doc.id)).toList();
+
+            _autoReleaseExpiredMachines(machines);
 
             return StreamBuilder<QuerySnapshot>(
               stream: _firestore.collection('bookings').where('type', isEqualTo: 'Washer').snapshots(),
@@ -411,11 +422,16 @@ class _WasherPageState extends State<WasherPage> {
     bool isBeforeSlot = now.isBefore(booking.startTime);
     bool isConfirmWindow = now.isAfter(booking.startTime.subtract(const Duration(minutes: 5))) && now.isBefore(booking.startTime.add(const Duration(minutes: 5)));
 
-    // Auto-popup detection
+    // CHECK IF FINISHED AND SHOW POPUP RANDOMLY
     if (booking.isPaid && machine.endTime != null && now.isAfter(machine.endTime!)) {
       if (!_shownPopups.contains(booking.id)) {
         _shownPopups.add(booking.id);
-        WidgetsBinding.instance.addPostFrameCallback((_) => _showRateUsPopup(booking.machineName));
+        
+        // Random check: 50% chance of showing the popup
+        // Change to Random().nextDouble() < 0.3 for a 30% chance
+        if (Random().nextBool()) {
+          WidgetsBinding.instance.addPostFrameCallback((_) => _showRateUsPopup(booking.machineName));
+        }
       }
     }
 
@@ -459,8 +475,7 @@ class _WasherPageState extends State<WasherPage> {
   }
 }
 
-// -------------------- BOOKING MODAL --------------------
-
+// -------------------- BOOKING MODAL (UPDATED SLOTS) --------------------
 class BookingModal extends StatefulWidget {
   final WashingMachine machine;
   final List<Booking> existingBookings;
@@ -503,7 +518,8 @@ class _BookingModalState extends State<BookingModal> {
       bool isTaken = widget.existingBookings.any((booking) {
         if (booking.machineId != widget.machine.id) return false;
         return slotStart.isBefore(booking.endTime) && slotEnd.isAfter(booking.startTime);
-      });
+      }) || (widget.machine.endTime != null && slotStart.isBefore(widget.machine.endTime!)); 
+
       _slots.add({'date': runner, 'isTaken': isTaken});
       runner = runner.add(Duration(minutes: _stepMinutes));
     }
