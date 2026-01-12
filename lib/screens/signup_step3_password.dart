@@ -140,7 +140,6 @@ Widget build(BuildContext context) {
 
                         const SizedBox(height: 30),
 
-                        /// 🔥 CARD (UNCHANGED DESIGN)
                         Container(
                           padding: const EdgeInsets.all(20),
                           decoration: BoxDecoration(
@@ -318,7 +317,7 @@ Widget build(BuildContext context) {
                                         ),
                                         style: ElevatedButton.styleFrom(
                                           backgroundColor: const Color(0xFFA500FF),
-                                          foregroundColor: Colors.white, // 🔥 THIS is the fix
+                                          foregroundColor: Colors.white, 
                                           shape: RoundedRectangleBorder(
                                             borderRadius: BorderRadius.circular(16),
                                           ),
@@ -351,7 +350,7 @@ Widget build(BuildContext context) {
                                         ),
                                         style: ElevatedButton.styleFrom(
                                           backgroundColor: const Color(0xFFA500FF),
-                                          foregroundColor: Colors.white, // 🔥 THIS is the fix
+                                          foregroundColor: Colors.white, 
                                           shape: RoundedRectangleBorder(
                                             borderRadius: BorderRadius.circular(16),
                                           ),
@@ -412,7 +411,7 @@ Widget build(BuildContext context) {
         Icon(
           ok ? Icons.check_circle : Icons.circle_outlined,
           color: ok ? Colors.purple : Colors.grey,
-          size: 20, // 👈 slightly bigger
+          size: 20, 
         ),
         const SizedBox(width: 8),
         Text(text),

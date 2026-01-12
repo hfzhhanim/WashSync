@@ -65,7 +65,7 @@ class _SignUpStep1NameState extends State<SignUpStep1Name> {
 
                         const SizedBox(height: 30),
 
-                        /// CARD (centered + tablet-friendly)
+                        /// CARD 
                         Center(
                           child: ConstrainedBox(
                             constraints: const BoxConstraints(maxWidth: 420),

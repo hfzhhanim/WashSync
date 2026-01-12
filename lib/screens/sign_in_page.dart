@@ -157,7 +157,7 @@ class _SignInPageState extends State<SignInPage> {
 
                         const SizedBox(height: 30),
 
-                        /// 👇 CENTER CARD + TABLET WIDTH CONTROL
+                        /// CARD 
                         Center(
                           child: ConstrainedBox(
                             constraints:

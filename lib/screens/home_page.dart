@@ -38,7 +38,6 @@ class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
   User? get user => FirebaseAuth.instance.currentUser;
 
-  // REMOVED 'const' from navigation logic to fix "Not a constant expression" error
   void _navigateTo(Widget page) {
     Navigator.push(
       context,
@@ -58,7 +57,7 @@ class _HomePageState extends State<HomePage> {
         label: "Profile",
         onTap: () {
           setState(() => _selectedIndex = 0);
-          _navigateTo(ProfilePage()); // Removed const
+          _navigateTo(ProfilePage()); 
         },
       ),
       NavItem(
@@ -66,7 +65,7 @@ class _HomePageState extends State<HomePage> {
         label: "History",
         onTap: () {
           setState(() => _selectedIndex = 1);
-          _navigateTo(HistoryPage()); // Removed const
+          _navigateTo(HistoryPage()); 
         },
       ),
       NavItem(
@@ -246,7 +245,7 @@ class _HomePageState extends State<HomePage> {
                 }
                 return _statCard(usageCount, "Total Uses", Icons.show_chart, () {
                     setState(() => _selectedIndex = 1);
-                    _navigateTo(HistoryPage()); // Removed const
+                    _navigateTo(HistoryPage()); 
                 });
               },
             ),
@@ -265,7 +264,7 @@ class _HomePageState extends State<HomePage> {
                   "RM ${balance.toStringAsFixed(2)}", 
                   "Balance", 
                   Icons.account_balance_wallet, 
-                  () => _navigateTo(WalletPage(amountToDeduct: -1.0)) // Removed const
+                  () => _navigateTo(WalletPage(amountToDeduct: -1.0)) 
                 );
               },
             ),
