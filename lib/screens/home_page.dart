@@ -2,13 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-// Team's Pages
 import 'sign_in_page.dart';
 import 'report_page.dart';           
 import 'feedback_rating_page.dart';   
 import 'history_page.dart'; // Ensure this file DOES NOT contain a second DryerPage or WasherPage class
 
-// YOUR Wallet & Payment Pages
 import 'wallet_page.dart';
 import 'payment_screen.dart';
 import 'washer_page.dart';
