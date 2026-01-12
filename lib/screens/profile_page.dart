@@ -45,7 +45,7 @@ class _ProfilePageState extends State<ProfilePage> {
     await FirebaseFirestore.instance
         .collection('users')
         .doc(user!.uid)
-        .update({'name': _nameController.text.trim()});
+        .update({'username': _nameController.text.trim()});
 
     setState(() => _isEditing = false);
   }
@@ -92,8 +92,7 @@ class _ProfilePageState extends State<ProfilePage> {
           final data =
               snapshot.data!.data() as Map<String, dynamic>? ?? {};
 
-          final name =
-              data['name'] ?? user!.email!.split('@').first;
+          final name = data['username'] ?? user!.email!.split('@').first;
           final email = data['email'] ?? user!.email!;
           final role = data['role'] ?? 'User';
 

@@ -192,6 +192,26 @@ class _AdminSignUpStep3PasswordState
                               ),
                             ],
                           ),
+
+                          /// PROGRESS
+                                  Row(
+                                    children: [
+                                      _progressBar(active: true),
+                                      _progressBar(active: true),
+                                      _progressBar(active: true),
+                                    ],
+                                  ),
+
+                                  const SizedBox(height: 6),
+
+                                  const Center(
+                                    child: Text(
+                                      "Step 3 of 3",
+                                      style: TextStyle(
+                                          color: Colors.purple),
+                                    ),
+                                  ),
+
                           const SizedBox(height: 20),
 
                           /// PASSWORD
@@ -402,6 +422,19 @@ class _AdminSignUpStep3PasswordState
     );
   }
 }
+
+Widget _progressBar({required bool active}) {
+    return Expanded(
+      child: Container(
+        height: 6,
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+        decoration: BoxDecoration(
+          color: active ? Colors.purple : Colors.grey.shade300,
+          borderRadius: BorderRadius.circular(10),
+        ),
+      ),
+    );
+  }
 
 class _SuccessDialog extends StatelessWidget {
   const _SuccessDialog();
