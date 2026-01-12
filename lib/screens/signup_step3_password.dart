@@ -428,26 +428,43 @@ class _SuccessDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Container(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(22),
+        margin: const EdgeInsets.symmetric(horizontal: 30),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(18),
         ),
-        child: const Column(
+        child: Column(
           mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.check_circle,
-                color: Colors.purple, size: 64),
-            SizedBox(height: 12),
-            Text(
-              "Account Created!",
-              style:
-                  TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          children: const [
+            Icon(
+              Icons.check_circle,
+              color: Colors.purple,
+              size: 48, 
             ),
-            SizedBox(height: 8),
+            SizedBox(height: 14),
+
             Text(
-              "Please verify your student email\nbefore signing in.",
+              "Account created",
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+                decoration: TextDecoration.none,
+              ),
+            ),
+
+            SizedBox(height: 8),
+
+            Text(
+              "Please verify your student email before signing in.",
               textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.black54,
+                height: 1.4,
+                decoration: TextDecoration.none,
+              ),
             ),
           ],
         ),

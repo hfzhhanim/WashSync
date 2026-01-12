@@ -25,10 +25,29 @@ class _SignInPageState extends State<SignInPage> {
       errorText = "";
     });
 
+    final email = emailController.text.trim();
+    final password = passwordController.text.trim();
+
+    if (!email.contains('@')) {
+      setState(() {
+        errorText = "Email format is not valid";
+        isLoading = false;
+      });
+      return;
+    }
+
+    if (password.isEmpty) {
+      setState(() {
+        errorText = "Please enter your password";
+        isLoading = false;
+      });
+      return;
+    }
+
     try {
       final userCredential = await _auth.signInWithEmailAndPassword(
-        email: emailController.text.trim(),
-        password: passwordController.text.trim(),
+        email: email,
+        password: password,
       );
 
       final user = userCredential.user!;
@@ -37,9 +56,12 @@ class _SignInPageState extends State<SignInPage> {
         await _auth.signOut();
         setState(() {
           errorText = "Please verify your student email before signing in.";
+          isLoading = false;
         });
         return;
       }
+
+      setState(() => isLoading = false);
 
       Navigator.pushReplacement(
         context,
@@ -47,16 +69,25 @@ class _SignInPageState extends State<SignInPage> {
       );
     } on FirebaseAuthException catch (e) {
       setState(() {
-        if (e.code == 'user-not-found') {
-          errorText = "No account found for this email";
-        } else if (e.code == 'wrong-password') {
-          errorText = "Incorrect password";
-        } else {
-          errorText = e.message ?? "Login failed";
+        isLoading = false;
+
+        switch (e.code) {
+          case 'user-not-found':
+            errorText = "No account found for this email";
+            break;
+          case 'wrong-password':
+            errorText = "Incorrect password";
+            break;
+          case 'invalid-email':
+            errorText = "Please enter a valid email address";
+            break;
+          case 'invalid-credential':
+            errorText = "Email or password is incorrect";
+            break;
+          default:
+            errorText = "Login failed. Please try again.";
         }
       });
-    } finally {
-      setState(() => isLoading = false);
     }
   }
 
