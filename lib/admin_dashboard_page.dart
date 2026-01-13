@@ -75,6 +75,24 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
     );
   }
 
+  // --- LOGIC TO DETERMINE STATUS (SYNCED WITH MAINTENANCE PAGE) ---
+  String _getEffectiveStatus(Map<String, dynamic> data) {
+    DateTime now = DateTime.now();
+    bool isInUse = (data['currentRemark'] == 'In Use' || data['status'] == 'In Use');
+    
+    Timestamp? startTs = data['maintenanceStart'] is Timestamp ? data['maintenanceStart'] : null;
+    DateTime? startTime = startTs?.toDate();
+
+    if (startTime != null && now.isAfter(startTime)) {
+      return isInUse ? 'Pending Maint.' : 'Maintenance';
+    } else if (isInUse) {
+      return 'In Use';
+    } else if (data['status'] == 'Maintenance') {
+      return 'Maintenance';
+    }
+    return 'Available';
+  }
+
   Widget _buildRealTimeSummary() {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('washers').snapshots(),
@@ -95,10 +113,11 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
 
             for (var doc in allDocs) {
               final data = doc.data() as Map<String, dynamic>;
-              // LINKING LOGIC: Check currentRemark for "In Use" first
-              if (data['currentRemark'] == 'In Use' || data['status'] == 'In Use') {
+              String status = _getEffectiveStatus(data);
+
+              if (status == 'In Use' || status == 'Pending Maint.') {
                 inUse++;
-              } else if (data['status'] == 'Maintenance') {
+              } else if (status == 'Maintenance') {
                 maintenance++;
               } else {
                 available++;
@@ -139,17 +158,10 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
             void processDocs(List<QueryDocumentSnapshot> docs, String type) {
               for (var doc in docs) {
                 final data = doc.data() as Map<String, dynamic>;
-                
-                // Determine display status based on linked fields
-                String displayStatus = data['status'] ?? 'Available';
-                if (data['currentRemark'] == 'In Use') {
-                  displayStatus = 'In Use';
-                }
-
                 tableData.add({
                   'type': type,
                   'id': doc.id,
-                  'status': displayStatus,
+                  'status': _getEffectiveStatus(data),
                 });
               }
             }
@@ -194,16 +206,18 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
       color = Colors.green;
     } else if (status == 'In Use') {
       color = Colors.blue;
-    } else {
+    } else if (status == 'Pending Maint.') {
       color = Colors.orange;
+    } else {
+      color = Colors.red;
     }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
       child: Text(
-        status, 
-        style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12)
+        status.toUpperCase(), 
+        style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 10)
       ),
     );
   }

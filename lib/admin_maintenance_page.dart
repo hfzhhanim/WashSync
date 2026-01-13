@@ -37,19 +37,58 @@ class _AdminMaintenancePageState extends State<AdminMaintenancePage> {
   // Helper to get collection names
   String _getCollection(String type) => type == 'Washer' ? 'washers' : 'dryers';
 
-  // Save or update maintenance info
+  // Helper to parse String dates from controllers into Firestore Timestamps
+  Timestamp? _parseToTimestamp(String dateStr) {
+    if (dateStr.isEmpty) return null;
+    try {
+      DateTime dt = DateFormat('yyyy-MM-dd').parse(dateStr);
+      return Timestamp.fromDate(dt);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Save or update maintenance info with logical validation
   void _saveMaintenance() async {
     if (_formKey.currentState!.validate() && _selectedMachineIndex != null) {
       var machine = _machines[_selectedMachineIndex!];
       String collection = _getCollection(machine['type']);
       String docId = machine['no'].toString();
 
+      setState(() => _isLoading = true);
+
       try {
+        // 1. Fetch current real-time status from Firestore
+        DocumentSnapshot doc = await FirebaseFirestore.instance
+            .collection(collection)
+            .doc(docId)
+            .get();
+        
+        final data = doc.data() as Map<String, dynamic>?;
+        bool isInUse = (data?['currentRemark'] == 'In Use' || data?['status'] == 'In Use');
+        
+        // 2. Check if the selected start date is Today
+        String todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+        bool isStartingToday = _startDateController.text == todayStr;
+
+        // 3. LOGICAL VALIDATION: Prevent maintenance if machine is busy right now
+        if (isInUse && isStartingToday) {
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Cannot start maintenance today: Machine is currently IN USE.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return; 
+        }
+
+        // 4. Save to Firestore as Timestamps
         await FirebaseFirestore.instance.collection(collection).doc(docId).set({
-          'maintenanceStart': _startDateController.text,
-          'maintenanceUntil': _endDateController.text,
+          'maintenanceStart': _parseToTimestamp(_startDateController.text),
+          'maintenanceUntil': _parseToTimestamp(_endDateController.text),
           'maintenanceDescription': _descriptionController.text,
-          'status': 'Maintenance',
+          // Note: We don't force 'status' here; the app logic handles the "Auto-Lock"
         }, SetOptions(merge: true));
 
         ScaffoldMessenger.of(context).showSnackBar(
@@ -59,8 +98,10 @@ class _AdminMaintenancePageState extends State<AdminMaintenancePage> {
         setState(() {
           _selectedMachineIndex = null;
           _clearForm();
+          _isLoading = false;
         });
       } catch (e) {
+        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
@@ -118,7 +159,7 @@ class _AdminMaintenancePageState extends State<AdminMaintenancePage> {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  'Set downtime periods and track machine issues.',
+                  'Downtime automatically locks machines once they finish active cycles.',
                   style: TextStyle(color: Colors.grey[600]),
                 ),
                 const SizedBox(height: 30),
@@ -166,16 +207,22 @@ class _AdminMaintenancePageState extends State<AdminMaintenancePage> {
               StreamBuilder<DocumentSnapshot>(
                 stream: docRef.snapshots(),
                 builder: (context, snapshot) {
-                  // Safe check to prevent "Bad State" error
                   if (!snapshot.hasData || !snapshot.data!.exists) {
                     return _buildStatusBadge('Available');
                   }
 
                   final data = snapshot.data!.data() as Map<String, dynamic>;
-                  String currentStatus = data['status'] ?? 'Available';
+                  DateTime now = DateTime.now();
+                  
+                  bool isInUse = (data['currentRemark'] == 'In Use' || data['status'] == 'In Use');
+                  Timestamp? startTs = data['maintenanceStart'] is Timestamp ? data['maintenanceStart'] : null;
+                  DateTime? startTime = startTs?.toDate();
+                  
+                  String currentStatus = 'Available';
 
-                  // Logic to check your current Firebase field 'currentRemark'
-                  if (data['currentRemark'] == 'In Use') {
+                  if (startTime != null && now.isAfter(startTime)) {
+                    currentStatus = isInUse ? 'Pending Maint.' : 'Maintenance';
+                  } else if (isInUse) {
                     currentStatus = 'In Use';
                   }
 
@@ -187,34 +234,31 @@ class _AdminMaintenancePageState extends State<AdminMaintenancePage> {
               StreamBuilder<DocumentSnapshot>(
                 stream: docRef.snapshots(),
                 builder: (context, snapshot) {
-                  String currentStatus = 'Available';
                   bool hasData = snapshot.hasData && snapshot.data!.exists;
-
+                  bool isScheduled = false;
+                  
                   if (hasData) {
                     final data = snapshot.data!.data() as Map<String, dynamic>;
-                    currentStatus = data['status'] ?? 'Available';
-                    if (data['currentRemark'] == 'In Use') currentStatus = 'In Use';
+                    isScheduled = data['maintenanceStart'] != null;
                   }
 
-                  final bool isScheduled = currentStatus == 'Maintenance';
-                  final bool isInUse = currentStatus == 'In Use';
-
                   return TextButton.icon(
-                    icon: Icon(isInUse ? Icons.lock : (isScheduled ? Icons.edit_note : Icons.calendar_month), size: 18),
-                    label: Text(isInUse ? "In Use" : (isScheduled ? "Update" : "Schedule")),
+                    icon: Icon(isScheduled ? Icons.edit_note : Icons.calendar_month, size: 18),
+                    label: Text(isScheduled ? "Update" : "Schedule"),
                     style: TextButton.styleFrom(
-                      foregroundColor: isInUse ? Colors.blueGrey : (isScheduled ? Colors.orange[800] : Colors.purple),
-                      padding: EdgeInsets.zero,
+                      foregroundColor: isScheduled ? Colors.orange[800] : Colors.purple,
                     ),
-                    onPressed: isInUse ? null : () async {
+                    onPressed: () {
                       setState(() => _selectedMachineIndex = e.key);
                       if (isScheduled && hasData) {
                         final data = snapshot.data!.data() as Map<String, dynamic>;
-                        setState(() {
-                          _startDateController.text = data['maintenanceStart'] ?? '';
-                          _endDateController.text = data['maintenanceUntil'] ?? '';
-                          _descriptionController.text = data['maintenanceDescription'] ?? '';
-                        });
+                        if (data['maintenanceStart'] is Timestamp) {
+                           _startDateController.text = DateFormat('yyyy-MM-dd').format((data['maintenanceStart'] as Timestamp).toDate());
+                        }
+                        if (data['maintenanceUntil'] is Timestamp) {
+                           _endDateController.text = DateFormat('yyyy-MM-dd').format((data['maintenanceUntil'] as Timestamp).toDate());
+                        }
+                        _descriptionController.text = data['maintenanceDescription'] ?? '';
                       } else {
                         _clearForm();
                       }
@@ -232,6 +276,8 @@ class _AdminMaintenancePageState extends State<AdminMaintenancePage> {
   Widget _buildStatusBadge(String status) {
     Color badgeColor;
     if (status == 'Maintenance') {
+      badgeColor = Colors.red;
+    } else if (status == 'Pending Maint.') {
       badgeColor = Colors.orange;
     } else if (status == 'In Use') {
       badgeColor = Colors.blue;
@@ -248,11 +294,7 @@ class _AdminMaintenancePageState extends State<AdminMaintenancePage> {
       ),
       child: Text(
         status.toUpperCase(),
-        style: TextStyle(
-          color: badgeColor.withOpacity(0.9),
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
-        ),
+        style: TextStyle(color: badgeColor, fontSize: 10, fontWeight: FontWeight.bold),
       ),
     );
   }
@@ -291,7 +333,6 @@ class _AdminMaintenancePageState extends State<AdminMaintenancePage> {
             ),
             const Divider(),
             const SizedBox(height: 20),
-            
             Row(
               children: [
                 Expanded(child: _buildDatePicker(controller: _startDateController, label: "Start Date")),
@@ -299,24 +340,19 @@ class _AdminMaintenancePageState extends State<AdminMaintenancePage> {
                 Expanded(child: _buildDatePicker(controller: _endDateController, label: "Estimated End Date")),
               ],
             ),
-            
             const SizedBox(height: 20),
-            
             TextFormField(
               controller: _descriptionController,
               maxLines: 3,
               decoration: InputDecoration(
                 labelText: "Description / Issues",
-                hintText: "Enter details about the repair needed...",
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                 filled: true,
                 fillColor: Colors.grey[50],
               ),
               validator: (val) => val == null || val.isEmpty ? 'Please enter a description' : null,
             ),
-            
             const SizedBox(height: 30),
-            
             Row(
               children: [
                 ElevatedButton.icon(
@@ -331,31 +367,16 @@ class _AdminMaintenancePageState extends State<AdminMaintenancePage> {
                   onPressed: _saveMaintenance,
                 ),
                 const SizedBox(width: 15),
-                // Only show "Mark as Available" if currently in maintenance
-                StreamBuilder<DocumentSnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection(_getCollection(machine['type']))
-                      .doc(machine['no'].toString())
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    if (snapshot.hasData && snapshot.data!.exists) {
-                      final data = snapshot.data!.data() as Map<String, dynamic>;
-                      if (data['status'] == 'Maintenance') {
-                        return OutlinedButton.icon(
-                          icon: const Icon(Icons.check_circle),
-                          label: const Text('Mark as Available'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.green[700],
-                            side: BorderSide(color: Colors.green.shade700),
-                            padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 18),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          ),
-                          onPressed: _completeMaintenanceEarly,
-                        );
-                      }
-                    }
-                    return const SizedBox.shrink();
-                  },
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.check_circle),
+                  label: const Text('Clear Schedule / Available'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.green[700],
+                    side: BorderSide(color: Colors.green.shade700),
+                    padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 18),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onPressed: _completeMaintenanceEarly,
                 ),
               ],
             ),
@@ -381,7 +402,7 @@ class _AdminMaintenancePageState extends State<AdminMaintenancePage> {
         DateTime? picked = await showDatePicker(
           context: context,
           initialDate: DateTime.now(),
-          firstDate: DateTime(2024),
+          firstDate: DateTime.now().subtract(const Duration(days: 1)),
           lastDate: DateTime(2030),
         );
         if (picked != null) {

@@ -5,7 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'sign_in_page.dart';
 import 'report_page.dart';           
 import 'feedback_rating_page.dart';   
-import 'history_page.dart'; // Ensure this file DOES NOT contain a second DryerPage or WasherPage class
+import 'history_page.dart'; 
 
 import 'wallet_page.dart';
 import 'payment_screen.dart';
@@ -110,7 +110,7 @@ class _HomePageState extends State<HomePage> {
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    "Machines",
+                    "Machines Status",
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -127,7 +127,7 @@ class _HomePageState extends State<HomePage> {
                 collectionPath: "washers",
                 icon: Icons.local_laundry_service,
                 color: const Color(0xFF9B59B6),
-                onTap: () => _navigateTo(WasherPage()), // Removed const
+                onTap: () => _navigateTo(const WasherPage()), 
               ),
               const SizedBox(height: 12),
               
@@ -137,7 +137,7 @@ class _HomePageState extends State<HomePage> {
                 collectionPath: "dryers",
                 icon: Icons.heat_pump,
                 color: const Color(0xFFB97AD9),
-                onTap: () => _navigateTo(DryerPage()), // Removed const
+                onTap: () => _navigateTo(const DryerPage()), 
               ),
               
               const Spacer(),
@@ -295,6 +295,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  // FIXED MACHINE BAR LOGIC
   Widget _machineBar({
     required String title, 
     required String collectionPath, 
@@ -311,44 +312,26 @@ class _HomePageState extends State<HomePage> {
         if (snapshot.hasData) {
           final docs = snapshot.data!.docs;
           total = docs.length;
+          DateTime now = DateTime.now();
 
           available = docs.where((doc) {
             final data = doc.data() as Map<String, dynamic>;
             
-            // 1. CHECK MAINTENANCE STATUS
-            bool isUnderMaintenance = false;
-            if (data['maintenanceUntil'] != null && data['maintenanceUntil'] != "") {
-              try {
-                DateTime endMaintenance = DateTime.parse(data['maintenanceUntil']);
-                // End of day threshold (23:59:59)
-                DateTime expiryPoint = DateTime(
-                  endMaintenance.year, 
-                  endMaintenance.month, 
-                  endMaintenance.day, 
-                  23, 59, 59
-                );
-                if (DateTime.now().isBefore(expiryPoint)) {
-                  isUnderMaintenance = true;
-                }
-              } catch (e) {
-                isUnderMaintenance = false;
+            // 1. Check if "In Use"
+            bool isInUse = data['currentRemark'] == 'In Use' || data['status'] == 'In Use';
+
+            // 2. Check Maintenance (Timestamp Logic)
+            bool isUnderMaintenance = data['status'] == 'Maintenance';
+            if (data['maintenanceStart'] != null && data['maintenanceStart'] is Timestamp) {
+              DateTime maintStart = (data['maintenanceStart'] as Timestamp).toDate();
+              // Machine is offline if start time has passed AND it's not being used 
+              // (or it will lock once currentRemark is cleared)
+              if (now.isAfter(maintStart) && !isInUse) {
+                isUnderMaintenance = true;
               }
             }
 
-            // 2. CHECK IN-USE STATUS (endTime)
-            bool isInUse = false;
-            final endTimeStr = data['endTime'];
-            if (endTimeStr != null && endTimeStr != "") {
-              try {
-                if (DateTime.now().isBefore(DateTime.parse(endTimeStr))) {
-                  isInUse = true;
-                }
-              } catch (e) {
-                isInUse = false;
-              }
-            }
-
-            // A machine is ONLY available if it is NOT in use AND NOT under maintenance
+            // Return true if machine is actually free
             return !isInUse && !isUnderMaintenance;
           }).length;
         }
@@ -359,6 +342,9 @@ class _HomePageState extends State<HomePage> {
           decoration: BoxDecoration(
             color: color, 
             borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+               BoxShadow(color: color.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))
+            ]
           ),
           child: Row(
             children: [

@@ -152,48 +152,78 @@ class AdminAnalyticsPage extends StatelessWidget {
   // --- HELPER WIDGETS ---
 
   Widget _buildDailyUsageChart(Map<int, int> washerDaily, Map<int, int> dryerDaily) {
-    // Determine the highest count for axis scaling
     int maxW = washerDaily.values.reduce((a, b) => a > b ? a : b);
     int maxD = dryerDaily.values.reduce((a, b) => a > b ? a : b);
     double maxY = (maxW > maxD ? maxW : maxD).toDouble();
 
     return Container(
-      height: 350,
+      height: 400, // Slightly increased height to accommodate legend
       padding: const EdgeInsets.all(20),
       decoration: _cardDecoration(),
-      child: BarChart(
-        BarChartData(
-          maxY: maxY < 5 ? 5 : maxY + 2,
-          gridData: const FlGridData(show: true, drawVerticalLine: false),
-          titlesData: FlTitlesData(
-            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            bottomTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                getTitlesWidget: (value, meta) {
-                  const days = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-                  int idx = value.toInt();
-                  if (idx > 0 && idx < days.length) {
-                    return Padding(
-                      padding: const EdgeInsets.only(top: 8.0),
-                      child: Text(days[idx], style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                    );
-                  }
-                  return const SizedBox.shrink();
-                },
+      child: Column(
+        children: [
+          // LEGEND ADDED HERE
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _buildLegendItem("Washer", Colors.blueAccent),
+              const SizedBox(width: 20),
+              _buildLegendItem("Dryer", Colors.purpleAccent),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Expanded(
+            child: BarChart(
+              BarChartData(
+                maxY: maxY < 5 ? 5 : maxY + 2,
+                gridData: const FlGridData(show: true, drawVerticalLine: false),
+                titlesData: FlTitlesData(
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      getTitlesWidget: (value, meta) {
+                        const days = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+                        int idx = value.toInt();
+                        if (idx > 0 && idx < days.length) {
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 8.0),
+                            child: Text(days[idx], style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
+                  ),
+                ),
+                barGroups: [1, 2, 3, 4, 5, 6, 7].map((day) {
+                  return _makeGroupData(
+                    day, 
+                    (washerDaily[day] ?? 0).toDouble(), 
+                    (dryerDaily[day] ?? 0).toDouble()
+                  );
+                }).toList(),
               ),
             ),
           ),
-          barGroups: [1, 2, 3, 4, 5, 6, 7].map((day) {
-            return _makeGroupData(
-              day, 
-              (washerDaily[day] ?? 0).toDouble(), 
-              (dryerDaily[day] ?? 0).toDouble()
-            );
-          }).toList(),
-        ),
+        ],
       ),
+    );
+  }
+
+  // NEW HELPER FOR LEGEND ITEMS
+  Widget _buildLegendItem(String label, Color color) {
+    return Row(
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.black54)),
+      ],
     );
   }
 
@@ -203,7 +233,7 @@ class AdminAnalyticsPage extends StatelessWidget {
       spots.add(FlSpot((i - 1).toDouble(), (monthlyCounts[i] ?? 0).toDouble()));
     }
 
-    double maxCount = monthlyCounts.values.reduce((a, b) => a > b ? a : b).toDouble();
+    double maxCount = monthlyCounts.values.isEmpty ? 0 : monthlyCounts.values.reduce((a, b) => a > b ? a : b).toDouble();
 
     return Container(
       height: 350,

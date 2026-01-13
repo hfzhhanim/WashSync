@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart'; // Added for date formatting
 import '../services/report_service.dart';
 
 class AdminReportsPage extends StatefulWidget {
@@ -35,16 +36,11 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
             ),
             const SizedBox(height: 30),
 
-            // 1. FILTER BAR
             _buildFilterBar(),
             const SizedBox(height: 20),
-
-            // 2. REPORT TABLE
             _buildTableContainer(),
-
             const SizedBox(height: 30),
             
-            // 3. DETAIL VIEW
             if (_selectedReportData != null) _buildDetailView(),
           ],
         ),
@@ -62,7 +58,6 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
   }
 
   Widget _buildFilterBar() {
-    // UPDATED: Filter labels to All, Pending, Resolved
     return Row(
       children: ['All', 'Pending', 'Resolved'].map((status) {
         bool isSelected = _selectedFilter == status;
@@ -100,18 +95,14 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
         builder: (context, snapshot) {
           if (!snapshot.hasData) return const LinearProgressIndicator();
 
-          // UPDATED: Filtering Logic
           var docs = snapshot.data!.docs.where((doc) {
             var data = doc.data() as Map<String, dynamic>;
             String status = data['status'] ?? 'Pending';
             
             if (_selectedFilter == 'All') return true;
-            
             if (_selectedFilter == 'Pending') {
-              // Show both 'Pending' and 'New' status reports under the Pending filter
               return status.toLowerCase() == 'pending' || status.toLowerCase() == 'new';
             }
-            
             return status.toLowerCase() == _selectedFilter.toLowerCase();
           }).toList();
 
@@ -156,27 +147,16 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
                     ),
                     DataCell(_buildStatusBadge(status)),
                     DataCell(
-                      isResolved
-                          ? TextButton.icon(
-                              icon: const Icon(Icons.visibility, size: 18),
-                              label: const Text('View'),
-                              onPressed: () {
-                                setState(() {
-                                  _selectedReportData = data;
-                                  _selectedReportId = doc.id;
-                                });
-                              },
-                            )
-                          : TextButton.icon(
-                              icon: const Icon(Icons.build_circle_outlined, size: 18),
-                              label: const Text('Resolve'),
-                              onPressed: () {
-                                setState(() {
-                                  _selectedReportData = data;
-                                  _selectedReportId = doc.id;
-                                });
-                              },
-                            ),
+                      TextButton.icon(
+                        icon: Icon(isResolved ? Icons.visibility : Icons.build_circle_outlined, size: 18),
+                        label: Text(isResolved ? 'View' : 'Resolve'),
+                        onPressed: () {
+                          setState(() {
+                            _selectedReportData = data;
+                            _selectedReportId = doc.id;
+                          });
+                        },
+                      ),
                     ),
                   ],
                 );
@@ -191,11 +171,15 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
   Widget _buildDetailView() {
     bool isResolved = _selectedReportData!['status']?.toString().toLowerCase() == 'resolved';
     
-    String displayName = _selectedReportData!['userName'] ?? 
-                        _selectedReportData!['username'] ?? 
-                        _selectedReportData!['name'] ?? 
-                        _selectedReportData!['displayName'] ??
-                        'Unknown User';
+    // Get the User ID from the report data
+    String? reporterUid = _selectedReportData!['userId'];
+
+    // Handle Timestamp Display
+    String reportTime = 'Unknown Time';
+    if (_selectedReportData!['timestamp'] != null) {
+      DateTime date = (_selectedReportData!['timestamp'] as Timestamp).toDate();
+      reportTime = DateFormat('dd MMM yyyy, hh:mm a').format(date);
+    }
 
     return Container(
       width: double.infinity,
@@ -223,17 +207,40 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
             children: [
               _infoTile('Machine', (_selectedReportData!['machineType'] ?? _selectedReportData!['category'] ?? 'Unknown').toString()),
               _infoTile('Machine No.', _getMachineNumber(_selectedReportData!['machineNumber'])),
-              _infoTile('Reported By', displayName), 
+              
+              // --- DYNAMIC USERNAME FETCH ---
+              if (reporterUid != null) 
+                FutureBuilder<DocumentSnapshot>(
+                  future: FirebaseFirestore.instance.collection('users').doc(reporterUid).get(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return _infoTile('Reported By', 'Loading...');
+                    }
+                    if (snapshot.hasData && snapshot.data!.exists) {
+                      final userData = snapshot.data!.data() as Map<String, dynamic>;
+                      return _infoTile('Reported By', userData['username'] ?? 'No Name');
+                    }
+                    return _infoTile('Reported By', 'Unknown User');
+                  },
+                )
+              else 
+                _infoTile('Reported By', 'Anonymous'),
+                
+              _infoTile('Date Reported', reportTime),
             ],
           ),
           const SizedBox(height: 25),
+          const Text('Issue Type:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+          Text(_selectedReportData!['issueType'] ?? 'General'),
+          const SizedBox(height: 15),
           const Text('Issue Description:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)),
           const SizedBox(height: 8),
           Text(_selectedReportData!['description'] ?? 'No description provided.'),
           const SizedBox(height: 30),
           
           if (!isResolved)
-            ElevatedButton(
+            ElevatedButton.icon(
+              icon: const Icon(Icons.check_circle_outline),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.green[600],
                 foregroundColor: Colors.white,
@@ -249,7 +256,7 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
                   }
                 }
               },
-              child: const Text('Mark as Resolved'),
+              label: const Text('Mark as Resolved'),
             ),
         ],
       ),
